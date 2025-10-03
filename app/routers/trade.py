@@ -9,7 +9,7 @@ from app.models.userModel import User
 from app.models.portfolioModel import Portfolio
 from app.models.orderModel import Order
 
-router = APIRouter(prefix="/trades", tags=["Trades"])
+router = APIRouter( tags=["Trades"])
 security = HTTPBearer()
 
 # -------------------------

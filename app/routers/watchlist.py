@@ -7,7 +7,7 @@ import jwt
 from app.models.userModel import User
 from app.models.watchlistModel import Watchlist
 
-router = APIRouter(prefix="/watchlist", tags=["Watchlist"])
+router = APIRouter( tags=["Watchlist"])
 security = HTTPBearer()
 
 # -------------------------

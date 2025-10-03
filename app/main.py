@@ -1,5 +1,3 @@
-
-
 import asyncio
 import logging
 import os
@@ -75,6 +73,65 @@ async def market_ws(ws: WebSocket):
         await ws.close()
 
 
+# ---- Register Routers ----
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(market.router, prefix="/api/market", tags=["market"])
+app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
+app.include_router(order.router, prefix="/api/orders", tags=["orders"])
+app.include_router(trade.router, prefix="/api/trades", tags=["trades"])
+app.include_router(watchlist.router, prefix="/api/watchlist", tags=["watchlist"])
+app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # ---- Root Endpoint (GET + HEAD) ----
@@ -106,14 +163,7 @@ async def fyers_callback(request: Request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# ---- Register Routers ----
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(market.router, prefix="/api/market", tags=["market"])
-app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
-app.include_router(order.router, prefix="/api/orders", tags=["orders"])
-app.include_router(trade.router, prefix="/api/trades", tags=["trades"])
-app.include_router(watchlist.router, prefix="/api/watchlist", tags=["watchlist"])
-app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
+
 
 # ---- Market Data WebSocket ----
 # @app.websocket("/ws/market")
