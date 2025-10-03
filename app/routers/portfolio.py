@@ -591,7 +591,7 @@ async def get_portfolio_holdings(user=Depends(authenticate)):
                 "day_change_percentage": h.get("dayChangePercentage", 0.0)
             })
 
-    return {"success": True, "data": holdings_with_details}
+    return holdings_with_details
 
 
 # ---------- Update holding prices ----------
