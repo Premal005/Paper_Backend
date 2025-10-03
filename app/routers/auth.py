@@ -258,6 +258,7 @@ import jwt, os
 
 from app.models.userModel import User
 from app.models.TransactionModel import Transaction
+from app.models.portfolioModel import Portfolio
 
 router = APIRouter(tags=["Auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -306,25 +307,73 @@ async def authenticate(token: str = Depends(oauth2_scheme)):
 
 # ---------- Routes ----------
 
+# @router.post("/register")
+# async def register(data: RegisterSchema):
+#     existing_user = await User.find_by_email(data.email)
+#     if existing_user:
+#         raise HTTPException(status_code=409, detail="User already exists with this email")
+
+#     user_data = {
+#         "name": data.name.strip(),
+#         "email": data.email.lower(),
+#         "passwordHash": data.password,  # TODO: hash properly
+#         "isActive": True
+#     }
+#     user_id = await User.create(user_data)
+
+#     await Transaction.create(user_id, "deposit", user_data.get("balance", 100000), "approved")
+
+#     token = generate_token(user_id)
+#     refresh_token = generate_refresh_token(user_id)
+
+#     response_user = {
+#         "id": str(user_id),
+#         "email": user_data["email"],
+#         "name": user_data["name"],
+#         "created_at": datetime.utcnow().isoformat() + "Z"
+#     }
+
+#     return {
+#         "success": True,
+#         "message": "Registration successful",
+#         "data": {
+#             "user": response_user,
+#             "tokens": {
+#                 "access_token": token,
+#                 "refresh_token": refresh_token,
+#                 "expires_in": 3600
+#             }
+#         }
+#     }
 @router.post("/register")
 async def register(data: RegisterSchema):
+    # Check if user already exists
     existing_user = await User.find_by_email(data.email)
     if existing_user:
         raise HTTPException(status_code=409, detail="User already exists with this email")
 
+    # Prepare user data
     user_data = {
         "name": data.name.strip(),
         "email": data.email.lower(),
         "passwordHash": data.password,  # TODO: hash properly
         "isActive": True
     }
+
+    # Create user
     user_id = await User.create(user_data)
 
+    # Create initial portfolio for the user
+    await Portfolio.create(user_id, holdings=[])
+
+    # Create initial transaction (deposit)
     await Transaction.create(user_id, "deposit", user_data.get("balance", 100000), "approved")
 
+    # Generate tokens
     token = generate_token(user_id)
     refresh_token = generate_refresh_token(user_id)
 
+    # Prepare response
     response_user = {
         "id": str(user_id),
         "email": user_data["email"],
@@ -344,7 +393,6 @@ async def register(data: RegisterSchema):
             }
         }
     }
-
 @router.post("/login")
 async def login(data: LoginSchema):
     user = await User.find_by_email(data.email)

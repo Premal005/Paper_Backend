@@ -363,69 +363,233 @@ async def authenticate(req: Request):
 
 
 # ---------- Get user portfolio (Summary) ----------
+# @router.get("/", summary="Get user portfolio summary")
+# async def get_portfolio(user=Depends(authenticate)):
+#     portfolio = await Portfolio.find_by_user(user["_id"])
+#     portfolio = clean_doc(portfolio)
+
+#     if not portfolio:
+#         portfolio_id = await Portfolio.create(str(user["_id"]))
+#         portfolio = await Portfolio.find_by_user(user["_id"])
+#         portfolio = clean_doc(portfolio)
+
+#     total_invested = sum(h["quantity"] * h["avgPrice"] for h in portfolio.get("holdings", []))
+#     total_current = sum(h["quantity"] * (h.get("currentPrice") or h["avgPrice"]) for h in portfolio.get("holdings", []))
+#     total_pnl = total_current - total_invested
+#     pnl_percentage = (total_pnl / total_invested * 100) if total_invested else 0
+
+#     # Dummy-style enriched response
+#     summary = {
+#         "total_value": round(total_current, 2),
+#         "total_invested": round(total_invested, 2),
+#         "total_pnl": round(total_pnl, 2),
+#         "total_pnl_percentage": round(pnl_percentage, 2),
+#         "available_balance": 15000.75,   # Placeholder / fetch from DB
+#         "margin_used": 45000.00,         # Placeholder
+#         "margin_available": 55000.00,    # Placeholder
+#         "margin_level": 122.22,          # Placeholder
+#         "day_pnl": 1250.25,              # Placeholder
+#         "day_pnl_percentage": 1.02,      # Placeholder
+#         "buying_power": 70000.75         # Placeholder
+#     }
+
+#     return {"success": True, "data": summary}
+# ---------- Get user portfolio (Summary) ----------
 @router.get("/", summary="Get user portfolio summary")
 async def get_portfolio(user=Depends(authenticate)):
+    # Fetch user data for balances
+    user_doc = await User.find_by_id(user["_id"])
+    
+    # Fetch portfolio from DB
     portfolio = await Portfolio.find_by_user(user["_id"])
+    
+    # If no portfolio exists, create an empty one
+    if not portfolio:
+        await Portfolio.create(str(user["_id"]))
+        portfolio = await Portfolio.find_by_user(user["_id"])
+
     portfolio = clean_doc(portfolio)
 
-    if not portfolio:
-        portfolio_id = await Portfolio.create(str(user["_id"]))
-        portfolio = await Portfolio.find_by_user(user["_id"])
-        portfolio = clean_doc(portfolio)
-
-    total_invested = sum(h["quantity"] * h["avgPrice"] for h in portfolio.get("holdings", []))
-    total_current = sum(h["quantity"] * (h.get("currentPrice") or h["avgPrice"]) for h in portfolio.get("holdings", []))
+    # Calculate totals from holdings
+    holdings = portfolio.get("holdings", [])
+    total_invested = sum(h["quantity"] * h["avgPrice"] for h in holdings)
+    total_current = sum(h["quantity"] * (h.get("currentPrice") or h["avgPrice"]) for h in holdings)
     total_pnl = total_current - total_invested
     pnl_percentage = (total_pnl / total_invested * 100) if total_invested else 0
 
-    # Dummy-style enriched response
+    # Build response matching dummy structure
     summary = {
         "total_value": round(total_current, 2),
         "total_invested": round(total_invested, 2),
         "total_pnl": round(total_pnl, 2),
         "total_pnl_percentage": round(pnl_percentage, 2),
-        "available_balance": 15000.75,   # Placeholder / fetch from DB
-        "margin_used": 45000.00,         # Placeholder
-        "margin_available": 55000.00,    # Placeholder
-        "margin_level": 122.22,          # Placeholder
-        "day_pnl": 1250.25,              # Placeholder
+        "available_balance": round(user_doc.get("balance", 15000.75), 2),
+        "margin_used": round(user_doc.get("marginUsed", 45000.00), 2),
+        "margin_available": round(user_doc.get("marginAvailable", 55000.00), 2),
+        "margin_level": 122.22,          # Placeholder, can calculate if needed
+        "day_pnl": 1250.25,              # Placeholder, can calculate daily PnL
         "day_pnl_percentage": 1.02,      # Placeholder
         "buying_power": 70000.75         # Placeholder
     }
 
     return {"success": True, "data": summary}
 
-
 # ---------- Get portfolio holdings ----------
-@router.get("/holdings", summary="Get portfolio holdings")
-async def get_portfolio_holdings(user=Depends(authenticate)):
+# @router.get("/holdings", summary="Get portfolio holdings")
+# async def get_portfolio_holdings(user=Depends(authenticate)):
+#     portfolio = await Portfolio.find_by_user(user["_id"])
+#     portfolio = clean_doc(portfolio)
+
+#     if not portfolio:
+#         return {"success": True, "data": []}
+
+#     holdings_with_details = []
+#     for h in portfolio.get("holdings", []):
+#         invested = h["quantity"] * h["avgPrice"]
+#         current_value = h["quantity"] * (h.get("currentPrice") or h["avgPrice"])
+#         pnl = current_value - invested
+#         pnl_percentage = (pnl / invested * 100) if invested else 0
+
+#         holdings_with_details.append({
+#             "id": str(h.get("_id", ObjectId())),
+#             "symbol": h["symbol"],
+#             "exchange": h["exchange"],
+#             "quantity": h["quantity"],
+#             "avg_price": h["avgPrice"],
+#             "current_price": h.get("currentPrice") or h["avgPrice"],
+#             "invested_value": round(invested, 2),
+#             "current_value": round(current_value, 2),
+#             "pnl": round(pnl, 2),
+#             "pnl_percentage": round(pnl_percentage, 2),
+#             "day_change": 15.25,             # Placeholder
+#             "day_change_percentage": 0.54    # Placeholder
+#         })
+
+#     return {"success": True, "data": holdings_with_details}
+# @router.get("/holdings", summary="Get portfolio holdings")
+# async def get_portfolio_holdings(user=Depends(authenticate)):
+    # Fetch portfolio
     portfolio = await Portfolio.find_by_user(user["_id"])
     portfolio = clean_doc(portfolio)
 
+    # Auto-create portfolio if missing
     if not portfolio:
-        return {"success": True, "data": []}
+        await Portfolio.create(str(user["_id"]), holdings=[])
+        portfolio = await Portfolio.find_by_user(user["_id"])
+        portfolio = clean_doc(portfolio)
 
     holdings_with_details = []
-    for h in portfolio.get("holdings", []):
-        invested = h["quantity"] * h["avgPrice"]
-        current_value = h["quantity"] * (h.get("currentPrice") or h["avgPrice"])
-        pnl = current_value - invested
-        pnl_percentage = (pnl / invested * 100) if invested else 0
 
+    # If there are no holdings, create a placeholder with zero values
+    if not portfolio.get("holdings"):
         holdings_with_details.append({
-            "id": str(h.get("_id", ObjectId())),
-            "symbol": h["symbol"],
-            "exchange": h["exchange"],
-            "quantity": h["quantity"],
-            "avg_price": h["avgPrice"],
-            "current_price": h.get("currentPrice") or h["avgPrice"],
-            "invested_value": round(invested, 2),
-            "current_value": round(current_value, 2),
-            "pnl": round(pnl, 2),
-            "pnl_percentage": round(pnl_percentage, 2),
-            "day_change": 15.25,             # Placeholder
-            "day_change_percentage": 0.54    # Placeholder
+            "id": "holding_000",
+            "symbol": "",
+            "exchange": "",
+            "quantity": 0,
+            "avg_price": 0.0,
+            "current_price": 0.0,
+            "invested_value": 0.0,
+            "current_value": 0.0,
+            "pnl": 0.0,
+            "pnl_percentage": 0.0,
+            "day_change": 0.0,
+            "day_change_percentage": 0.0
         })
+    else:
+        # Calculate values for actual holdings
+        for h in portfolio.get("holdings", []):
+            invested = h["quantity"] * h["avgPrice"]
+            current_value = h["quantity"] * (h.get("currentPrice") or h["avgPrice"])
+            pnl = current_value - invested
+            pnl_percentage = (pnl / invested * 100) if invested else 0
+
+            holdings_with_details.append({
+                "id": str(h.get("_id", ObjectId())),
+                "symbol": h["symbol"],
+                "exchange": h["exchange"],
+                "quantity": h["quantity"],
+                "avg_price": h["avgPrice"],
+                "current_price": h.get("currentPrice") or h["avgPrice"],
+                "invested_value": round(invested, 2),
+                "current_value": round(current_value, 2),
+                "pnl": round(pnl, 2),
+                "pnl_percentage": round(pnl_percentage, 2),
+                "day_change": h.get("dayChange", 0.0),
+                "day_change_percentage": h.get("dayChangePercentage", 0.0)
+            })
+
+    return {"success": True, "data": holdings_with_details}
+
+
+@router.get("/holdings", summary="Get portfolio holdings")
+async def get_portfolio_holdings(user=Depends(authenticate)):
+    # Fetch portfolio
+    portfolio = await Portfolio.find_by_user(user["_id"])
+    portfolio = clean_doc(portfolio)
+
+    # Auto-create portfolio if missing
+    if not portfolio:
+        await Portfolio.create(str(user["_id"]), holdings=[])
+        portfolio = await Portfolio.find_by_user(user["_id"])
+        portfolio = clean_doc(portfolio)
+
+    holdings_with_details = []
+
+    # If there are no holdings, return dummy structure with zero/placeholder values
+    if not portfolio.get("holdings"):
+        holdings_with_details = [
+            {
+                "id": "holding_001",
+                "symbol": "RELIANCE",
+                "exchange": "NSE",
+                "quantity": 0,
+                "avg_price": 0.0,
+                "current_price": 0.0,
+                "invested_value": 0.0,
+                "current_value": 0.0,
+                "pnl": 0.0,
+                "pnl_percentage": 0.0,
+                "day_change": 0.0,
+                "day_change_percentage": 0.0
+            },
+            {
+                "id": "holding_002",
+                "symbol": "TCS",
+                "exchange": "NSE",
+                "quantity": 0,
+                "avg_price": 0.0,
+                "current_price": 0.0,
+                "invested_value": 0.0,
+                "current_value": 0.0,
+                "pnl": 0.0,
+                "pnl_percentage": 0.0,
+                "day_change": 0.0,
+                "day_change_percentage": 0.0
+            }
+        ]
+    else:
+        # Calculate values for actual holdings
+        for h in portfolio.get("holdings", []):
+            invested = h["quantity"] * h["avgPrice"]
+            current_value = h["quantity"] * (h.get("currentPrice") or h["avgPrice"])
+            pnl = current_value - invested
+            pnl_percentage = (pnl / invested * 100) if invested else 0
+
+            holdings_with_details.append({
+                "id": str(h.get("_id", ObjectId())),
+                "symbol": h["symbol"],
+                "exchange": h["exchange"],
+                "quantity": h["quantity"],
+                "avg_price": h["avgPrice"],
+                "current_price": h.get("currentPrice") or h["avgPrice"],
+                "invested_value": round(invested, 2),
+                "current_value": round(current_value, 2),
+                "pnl": round(pnl, 2),
+                "pnl_percentage": round(pnl_percentage, 2),
+                "day_change": h.get("dayChange", 0.0),
+                "day_change_percentage": h.get("dayChangePercentage", 0.0)
+            })
 
     return {"success": True, "data": holdings_with_details}
 
