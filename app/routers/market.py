@@ -65,6 +65,16 @@ def clean_doc(doc: dict) -> dict:
 
 
 # ---------- Search by symbol or partial name ----------
+# @router.get("/search")
+# async def search_market(query: Optional[str] = Query("", alias="query"), limit: int = Query(50)):
+#     try:
+#         cursor = MarketData.collection.find({
+#             "symbol": {"$regex": query, "$options": "i"}
+#         }).limit(limit)
+#         results = await cursor.to_list(length=limit)
+#         return [clean_doc(doc) for doc in results]
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 @router.get("/search")
 async def search_market(query: Optional[str] = Query("", alias="query"), limit: int = Query(50)):
     try:
@@ -72,43 +82,101 @@ async def search_market(query: Optional[str] = Query("", alias="query"), limit: 
             "symbol": {"$regex": query, "$options": "i"}
         }).limit(limit)
         results = await cursor.to_list(length=limit)
-        return [clean_doc(doc) for doc in results]
+
+        formatted = [
+            {
+                "symbol": doc.get("symbol"),
+                "exchange": doc.get("exchange"),
+                "name": doc.get("name"),
+                "sector": doc.get("sector"),
+                "current_price": doc.get("current_price"),
+                "day_change": doc.get("day_change"),
+                "day_change_percentage": doc.get("day_change_percentage")
+            }
+            for doc in results
+        ]
+        return formatted
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ---------- Get by category / tab: Futures | Options | Forex | Crypto ----------
+# ---------- Get by category / tab: Futures | Options | Forex | Crypto ----------
+# @router.get("/category/{type}")
+# async def get_market_by_category(type: str):
+#     # Normalize input: strip spaces and uppercase
+#     type_normalized = type.strip().upper()
+    
+#     # Allowed types in uppercase
+#     allowed = ["FUTURES", "OPTIONS", "FOREX", "CRYPTO"]
+#     if type_normalized not in allowed:
+#         raise HTTPException(status_code=400, detail="Invalid type")
 
-# ---------- Get by category / tab: Futures | Options | Forex | Crypto ----------
-# ---------- Get by category / tab: Futures | Options | Forex | Crypto ----------
+#     try:
+#         # Case-insensitive regex match to avoid DB case issues
+#         cursor = MarketData.collection.find({
+#             "exchange": {"$regex": f"^{type_normalized}$", "$options": "i"}
+#         }).limit(200)
+#         results = await cursor.to_list(length=200)
+#         return [clean_doc(doc) for doc in results]
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/category/{type}")
 async def get_market_by_category(type: str):
-    # Normalize input: strip spaces and uppercase
     type_normalized = type.strip().upper()
-    
-    # Allowed types in uppercase
     allowed = ["FUTURES", "OPTIONS", "FOREX", "CRYPTO"]
     if type_normalized not in allowed:
         raise HTTPException(status_code=400, detail="Invalid type")
 
     try:
-        # Case-insensitive regex match to avoid DB case issues
         cursor = MarketData.collection.find({
             "exchange": {"$regex": f"^{type_normalized}$", "$options": "i"}
         }).limit(200)
         results = await cursor.to_list(length=200)
-        return [clean_doc(doc) for doc in results]
+
+        formatted = [
+            {
+                "symbol": doc.get("symbol"),
+                "exchange": doc.get("exchange"),
+                "name": doc.get("name"),
+                "sector": doc.get("sector"),
+                "current_price": doc.get("current_price"),
+                "day_change": doc.get("day_change"),
+                "day_change_percentage": doc.get("day_change_percentage")
+            }
+            for doc in results
+        ]
+        return formatted
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
 # ---------- Get single symbol latest ----------
+# @router.get("/{exchange}/{symbol}")
+# async def get_single_market(exchange: str, symbol: str):
+#     try:
+#         # Normalize input
+#         exchange = exchange.strip()
+#         symbol = symbol.strip()
+
+#         # Case-insensitive search using regex
+#         item = await MarketData.collection.find_one({
+#             "exchange": {"$regex": f"^{exchange}$", "$options": "i"},
+#             "symbol": {"$regex": f"^{symbol}$", "$options": "i"}
+#         })
+
+#         if not item:
+#             raise HTTPException(status_code=404, detail="Not found")
+
+#         return clean_doc(item)
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{exchange}/{symbol}")
 async def get_single_market(exchange: str, symbol: str):
     try:
-        # Normalize input
         exchange = exchange.strip()
         symbol = symbol.strip()
 
-        # Case-insensitive search using regex
         item = await MarketData.collection.find_one({
             "exchange": {"$regex": f"^{exchange}$", "$options": "i"},
             "symbol": {"$regex": f"^{symbol}$", "$options": "i"}
@@ -117,8 +185,22 @@ async def get_single_market(exchange: str, symbol: str):
         if not item:
             raise HTTPException(status_code=404, detail="Not found")
 
-        return clean_doc(item)
+        data = {
+            "symbol": item.get("symbol"),
+            "exchange": item.get("exchange"),
+            "name": item.get("name"),
+            "sector": item.get("sector"),
+            "current_price": item.get("current_price"),
+            "day_change": item.get("day_change"),
+            "day_change_percentage": item.get("day_change_percentage"),
+            "open": item.get("open"),
+            "high": item.get("high"),
+            "low": item.get("low"),
+            "volume": item.get("volume"),
+            "market_cap": item.get("market_cap"),
+        }
+
+        return {"success": True, "data": data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

@@ -513,6 +513,38 @@ async def create_order(
         "data": {"order": serialize_order(order_data)}
     }
 
+# @router.get("/", summary="Get user orders")
+# async def get_orders(
+#     page: int = Query(1, ge=1),
+#     limit: int = Query(20, ge=1),
+#     status: Optional[str] = None,
+#     symbol: Optional[str] = None,
+#     user=Depends(authenticate)
+# ):
+#     orders = await Order.find_by_user(user["_id"])
+#     if status:
+#         orders = [o for o in orders if o["status"] == status]
+#     if symbol:
+#         orders = [o for o in orders if symbol.lower() in o["symbol"].lower()]
+
+#     start = (page - 1) * limit
+#     end = start + limit
+#     paginated = [serialize_order(o) for o in orders[start:end]]
+#     total_pages = (len(orders) + limit - 1) // limit
+
+#     return {
+#         "success": True,
+#         "data": {
+#             "orders": paginated,
+#             "pagination": {
+#                 "currentPage": page,
+#                 "totalPages": total_pages,
+#                 "totalOrders": len(orders),
+#                 "hasNext": page < total_pages,
+#                 "hasPrev": page > 1
+#             }
+#         }
+#     }
 @router.get("/", summary="Get user orders")
 async def get_orders(
     page: int = Query(1, ge=1),
@@ -529,23 +561,27 @@ async def get_orders(
 
     start = (page - 1) * limit
     end = start + limit
-    paginated = [serialize_order(o) for o in orders[start:end]]
+    paginated = [
+        {
+            "id": str(o.get("_id")),
+            "symbol": o.get("symbol"),
+            "exchange": o.get("exchange"),
+            "quantity": o.get("quantity"),
+            "side": o.get("side"),
+            "order_type": o.get("orderType"),
+            "price": o.get("orderPrice"),
+            "status": o.get("status"),
+            "created_at": o.get("createdAt"),
+            "executed_at": o.get("executedAt")
+        }
+        for o in orders[start:end]
+    ]
     total_pages = (len(orders) + limit - 1) // limit
 
     return {
         "success": True,
-        "data": {
-            "orders": paginated,
-            "pagination": {
-                "currentPage": page,
-                "totalPages": total_pages,
-                "totalOrders": len(orders),
-                "hasNext": page < total_pages,
-                "hasPrev": page > 1
-            }
-        }
+        "data": paginated  # 👈 Matches your dummy ordersResponse structure (list only)
     }
-
 
 @router.get("/{order_id}", summary="Get order by ID")
 async def get_order_by_id(order_id: str, user=Depends(authenticate)):
@@ -606,6 +642,43 @@ async def get_order_stats(user=Depends(authenticate)):
 
 
 
+# @router.get("/stats", summary="Get order statistics")
+# async def get_order_stats(user=Depends(authenticate)):
+#     try:
+#         orders = await Order.find_by_user(user["_id"]) or []
+#     except Exception as e:
+#         print("Error fetching orders:", e)
+#         orders = []
+
+#     stats = {}
+#     total_orders = len(orders)
+#     active_orders = len([o for o in orders if o.get("status") == "active"])
+#     total_invested = sum(o.get("quantity", 0) * o.get("orderPrice", 0) for o in orders)
+#     active_investment = sum(
+#         o.get("quantity", 0) * o.get("orderPrice", 0)
+#         for o in orders if o.get("status") == "active"
+#     )
+
+#     for o in orders:
+#         key = o.get("status", "unknown")
+#         if key not in stats:
+#             stats[key] = {"count": 0, "totalQuantity": 0, "totalValue": 0}
+#         stats[key]["count"] += 1
+#         stats[key]["totalQuantity"] += o.get("quantity", 0)
+#         stats[key]["totalValue"] += o.get("quantity", 0) * o.get("orderPrice", 0)
+
+#     return {
+#         "success": True,
+#         "data": {
+#             "stats": stats,
+#             "totalOrders": total_orders,
+#             "activeOrders": active_orders,
+#             "summary": {
+#                 "totalInvested": total_invested,
+#                 "activeInvestment": active_investment
+#             }
+#         }
+#     }
 @router.get("/stats", summary="Get order statistics")
 async def get_order_stats(user=Depends(authenticate)):
     try:
@@ -614,32 +687,20 @@ async def get_order_stats(user=Depends(authenticate)):
         print("Error fetching orders:", e)
         orders = []
 
-    stats = {}
     total_orders = len(orders)
-    active_orders = len([o for o in orders if o.get("status") == "active"])
-    total_invested = sum(o.get("quantity", 0) * o.get("orderPrice", 0) for o in orders)
-    active_investment = sum(
-        o.get("quantity", 0) * o.get("orderPrice", 0)
-        for o in orders if o.get("status") == "active"
-    )
+    executed_orders = len([o for o in orders if o.get("status") == "executed"])
+    pending_orders = len([o for o in orders if o.get("status") == "pending"])
+    cancelled_orders = len([o for o in orders if o.get("status") == "cancelled"])
 
-    for o in orders:
-        key = o.get("status", "unknown")
-        if key not in stats:
-            stats[key] = {"count": 0, "totalQuantity": 0, "totalValue": 0}
-        stats[key]["count"] += 1
-        stats[key]["totalQuantity"] += o.get("quantity", 0)
-        stats[key]["totalValue"] += o.get("quantity", 0) * o.get("orderPrice", 0)
+    success_rate = round((executed_orders / total_orders) * 100, 2) if total_orders > 0 else 0.0
 
     return {
         "success": True,
         "data": {
-            "stats": stats,
-            "totalOrders": total_orders,
-            "activeOrders": active_orders,
-            "summary": {
-                "totalInvested": total_invested,
-                "activeInvestment": active_investment
-            }
+            "total_orders": total_orders,
+            "executed_orders": executed_orders,
+            "pending_orders": pending_orders,
+            "cancelled_orders": cancelled_orders,
+            "success_rate": success_rate
         }
     }
