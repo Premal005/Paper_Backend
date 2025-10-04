@@ -407,14 +407,53 @@ from fastapi import WebSocket
 import json
 
 # ---- WebSocket Endpoint for Live Prices ----
+# @app.websocket("/ws/ticks/{symbol}")
+# async def ticks_ws(websocket: WebSocket, symbol: str):
+#     await websocket.accept()
+#     if not mt5_conn.connected:
+#         mt5_conn.connect()
+
+#     try:
+#         # Subscribe to symbol
+#         if not mt5.symbol_select(symbol, True):
+#             await websocket.send_text(json.dumps({"error": f"Symbol {symbol} not found"}))
+#             await websocket.close()
+#             return
+
+#         await websocket.send_text(json.dumps({"msg": f"✅ Connected to {symbol} ticks"}))
+
+#         last_time = None
+#         while True:
+#             tick = mt5.symbol_info_tick(symbol)
+#             if tick and (last_time is None or tick.time != last_time):
+#                 # Send only if new tick
+#                 data = {
+#                     "symbol": symbol,
+#                     "time": tick.time,
+#                     "bid": tick.bid,
+#                     "ask": tick.ask,
+#                     "last": tick.last,
+#                     "volume": tick.volume
+#                 }
+#                 await websocket.send_text(json.dumps(data))
+#                 last_time = tick.time
+
+#             # Small sleep to avoid hammering CPU
+#             await asyncio.sleep(0.5)
+
+#     except Exception as e:
+#         await websocket.send_text(json.dumps({"error": str(e)}))
+#     finally:
+#         await websocket.close()
 @app.websocket("/ws/ticks/{symbol}")
 async def ticks_ws(websocket: WebSocket, symbol: str):
+    # Accept connection immediately (no extra headers)
     await websocket.accept()
+
     if not mt5_conn.connected:
         mt5_conn.connect()
-
     try:
-        # Subscribe to symbol
+        # Select symbol
         if not mt5.symbol_select(symbol, True):
             await websocket.send_text(json.dumps({"error": f"Symbol {symbol} not found"}))
             await websocket.close()
@@ -426,7 +465,6 @@ async def ticks_ws(websocket: WebSocket, symbol: str):
         while True:
             tick = mt5.symbol_info_tick(symbol)
             if tick and (last_time is None or tick.time != last_time):
-                # Send only if new tick
                 data = {
                     "symbol": symbol,
                     "time": tick.time,
@@ -438,14 +476,13 @@ async def ticks_ws(websocket: WebSocket, symbol: str):
                 await websocket.send_text(json.dumps(data))
                 last_time = tick.time
 
-            # Small sleep to avoid hammering CPU
+            # Avoid hammering CPU
             await asyncio.sleep(0.5)
 
     except Exception as e:
         await websocket.send_text(json.dumps({"error": str(e)}))
     finally:
         await websocket.close()
-
 
 async def broadcast(message: dict):
     """Send JSON to all connected WS clients"""
