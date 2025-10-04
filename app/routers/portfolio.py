@@ -320,8 +320,8 @@ from app.models.userModel import User
 from app.models.portfolioModel import Portfolio
 
 router = APIRouter(tags=["Portfolio"])
-
 JWT_SECRET = os.getenv("JWT_SECRET", "secret")
+
 
 
 # ---------- Helper: Convert ObjectId to str recursively ----------

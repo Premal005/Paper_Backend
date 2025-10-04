@@ -545,6 +545,44 @@ async def create_order(
 #             }
 #         }
 #     }
+# @router.get("/", summary="Get user orders")
+# async def get_orders(
+#     page: int = Query(1, ge=1),
+#     limit: int = Query(20, ge=1),
+#     status: Optional[str] = None,
+#     symbol: Optional[str] = None,
+#     user=Depends(authenticate)
+# ):
+#     orders = await Order.find_by_user(user["_id"])
+#     if status:
+#         orders = [o for o in orders if o["status"] == status]
+#     if symbol:
+#         orders = [o for o in orders if symbol.lower() in o["symbol"].lower()]
+
+#     start = (page - 1) * limit
+#     end = start + limit
+#     paginated = [
+#         {
+#             "id": str(o.get("_id")),
+#             "symbol": o.get("symbol"),
+#             "exchange": o.get("exchange"),
+#             "quantity": o.get("quantity"),
+#             "side": o.get("side"),
+#             "order_type": o.get("orderType"),
+#             "price": o.get("orderPrice"),
+#             "status": o.get("status"),
+#             "created_at": o.get("createdAt"),
+#             "executed_at": o.get("executedAt")
+#         }
+#         for o in orders[start:end]
+#     ]
+#     total_pages = (len(orders) + limit - 1) // limit
+
+#     return {
+#         "success": True,
+#         "data": paginated  # 👈 Matches your dummy ordersResponse structure (list only)
+#     }
+
 @router.get("/", summary="Get user orders")
 async def get_orders(
     page: int = Query(1, ge=1),
@@ -553,12 +591,15 @@ async def get_orders(
     symbol: Optional[str] = None,
     user=Depends(authenticate)
 ):
-    orders = await Order.find_by_user(user["_id"])
+    orders = await Order.find_by_user(user["_id"]) or []
+
+    # Apply filters
     if status:
         orders = [o for o in orders if o["status"] == status]
     if symbol:
         orders = [o for o in orders if symbol.lower() in o["symbol"].lower()]
 
+    # Pagination
     start = (page - 1) * limit
     end = start + limit
     paginated = [
@@ -576,12 +617,25 @@ async def get_orders(
         }
         for o in orders[start:end]
     ]
+
+    # If no orders exist, return one fake order
+    if not paginated:
+        paginated = [{
+            "id": "fake_id",
+            "symbol": "FAKE",
+            "exchange": "FAKE",
+            "quantity": 0,
+            "side": "fake",
+            "order_type": "fake",
+            "price": 0,
+            "status": "fake",
+            "created_at": "2025-01-01T00:00:00Z",
+            "executed_at": None
+        }]
+
     total_pages = (len(orders) + limit - 1) // limit
 
-    return {
-        "success": True,
-        "data": paginated  # 👈 Matches your dummy ordersResponse structure (list only)
-    }
+    return paginated
 
 @router.get("/{order_id}", summary="Get order by ID")
 async def get_order_by_id(order_id: str, user=Depends(authenticate)):
@@ -679,23 +733,61 @@ async def get_order_stats(user=Depends(authenticate)):
 #             }
 #         }
 #     }
+# @router.get("/stats", summary="Get order statistics")
+# async def get_order_stats(user=Depends(authenticate)):
+#     try:
+#         orders = await Order.find_by_user(user["_id"]) or []
+#     except Exception as e:
+#         print("Error fetching orders:", e)
+#         orders = []
+
+#     total_orders = len(orders)
+#     executed_orders = len([o for o in orders if o.get("status") == "executed"])
+#     pending_orders = len([o for o in orders if o.get("status") == "pending"])
+#     cancelled_orders = len([o for o in orders if o.get("status") == "cancelled"])
+
+#     success_rate = round((executed_orders / total_orders) * 100, 2) if total_orders > 0 else 0.0
+
+#     return {
+#         "success": True,
+#         "data": {
+#             "total_orders": total_orders,
+#             "executed_orders": executed_orders,
+#             "pending_orders": pending_orders,
+#             "cancelled_orders": cancelled_orders,
+#             "success_rate": success_rate
+#         }
+#     }
+
+
 @router.get("/stats", summary="Get order statistics")
 async def get_order_stats(user=Depends(authenticate)):
     try:
-        orders = await Order.find_by_user(user["_id"]) or []
+        orders = await Order.find_by_user(user["_id"])
+        if not orders:
+            orders = []  # Ensure empty list if nothing found
     except Exception as e:
         print("Error fetching orders:", e)
         orders = []
 
-    total_orders = len(orders)
-    executed_orders = len([o for o in orders if o.get("status") == "executed"])
-    pending_orders = len([o for o in orders if o.get("status") == "pending"])
-    cancelled_orders = len([o for o in orders if o.get("status") == "cancelled"])
+    # If there are real orders, calculate stats
+    if orders:
+        total_orders = len(orders)
+        executed_orders = len([o for o in orders if o.get("status") == "executed"])
+        pending_orders = len([o for o in orders if o.get("status") == "pending"])
+        cancelled_orders = len([o for o in orders if o.get("status") == "cancelled"])
+        success_rate = round((executed_orders / total_orders) * 100, 2) if total_orders > 0 else 0.0
+    else:
+        # Fake stats when no orders exist
+        total_orders = 0
+        executed_orders = 0
+        pending_orders = 0
+        cancelled_orders = 0
+        success_rate = 0.0
 
-    success_rate = round((executed_orders / total_orders) * 100, 2) if total_orders > 0 else 0.0
-
+    # Always return the same structure
     return {
-        "success": True,
+       "success": True,
         "data": {
             "total_orders": total_orders,
             "executed_orders": executed_orders,
