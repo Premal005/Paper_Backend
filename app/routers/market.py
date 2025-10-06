@@ -1013,6 +1013,15 @@ async def get_quote_alpaca(symbol: str):
     try:
         rest = alpacaService.get_rest_client()
         quote = rest.get_latest_quote(symbol)
+
+        try:
+            asset = rest.get_asset(symbol)
+            name = asset.name
+            exchange = asset.exchange
+        except Exception:
+            name = ""
+            exchange = "ALPACA"
+            
         return {
             "symbol": symbol,
             "exchange": "ALPACA",
