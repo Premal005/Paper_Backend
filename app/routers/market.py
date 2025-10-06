@@ -1113,15 +1113,16 @@ async def search_symbol(symbol: str = Query(..., min_length=1)):
     if not result:
         return []
 
+    
     # Map to marketSearchResponse format
     formatted = [{
         "symbol": result.get("symbol", symbol),
         "exchange": result.get("exchange", ""),
         "name": result.get("name", ""),  # add mapping if available
         "sector": result.get("sector", ""),  # add mapping if available
-        "current_price": result.get("last_price", 0),
-        "day_change": result.get("day_change", 0),
-        "day_change_percentage": result.get("day_change_percentage", 0)
+        "current_price": result.get("last_price") or result.get("ltp") or 0,
+        "day_change": result.get("day_change") or 0,
+        "day_change_percentage": result.get("day_change_percentage") or 0
     }]
     return formatted
 
