@@ -337,6 +337,9 @@ market_collection = db["marketdata"]
 
 router = APIRouter()
 
+logger.info(f"Loaded Alpaca Key: {ALPACA_API_KEY}, Secret: {'SET' if ALPACA_SECRET_KEY else 'MISSING'}")
+
+
 def get_rest_client():
     if not ALPACA_API_KEY or not ALPACA_SECRET_KEY:
         raise ValueError("Alpaca credentials missing")
