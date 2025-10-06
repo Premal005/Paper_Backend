@@ -1086,23 +1086,46 @@ def clean_doc(doc: dict) -> dict:
 # API Endpoints
 # ----------------------
 
+# @router.get("/search")
+# async def search_symbol(symbol: str = Query(..., min_length=1)):
+#     symbol = symbol.upper()
+#     result = await get_quote_alpaca(symbol) or await get_quote_mt5(symbol)
+#     if not result:
+#         return {
+#             "symbol": symbol,
+#             "source": None,
+#             "data": {
+#                 "bid": 0,
+#                 "ask": 0,
+#                 "last_price": 0,
+#                 "timestamp": datetime.utcnow().isoformat(),
+#                 "note": "Symbol not found in any broker"
+#             }
+#         }
+#     return {"symbol": symbol, "source": result.get("source"), "data": result}
+
+
 @router.get("/search")
 async def search_symbol(symbol: str = Query(..., min_length=1)):
     symbol = symbol.upper()
     result = await get_quote_alpaca(symbol) or await get_quote_mt5(symbol)
+
     if not result:
-        return {
-            "symbol": symbol,
-            "source": None,
-            "data": {
-                "bid": 0,
-                "ask": 0,
-                "last_price": 0,
-                "timestamp": datetime.utcnow().isoformat(),
-                "note": "Symbol not found in any broker"
-            }
-        }
-    return {"symbol": symbol, "source": result.get("source"), "data": result}
+        return []
+
+    # Map to marketSearchResponse format
+    formatted = [{
+        "symbol": result.get("symbol", symbol),
+        "exchange": result.get("exchange", ""),
+        "name": result.get("name", ""),  # add mapping if available
+        "sector": result.get("sector", ""),  # add mapping if available
+        "current_price": result.get("last_price", 0),
+        "day_change": result.get("day_change", 0),
+        "day_change_percentage": result.get("day_change_percentage", 0)
+    }]
+    return formatted
+
+
 
 @router.get("/category/{type}")
 async def get_market_by_category(type: str):
@@ -1131,37 +1154,174 @@ async def get_market_by_category(type: str):
     except Exception as e:
         return {"error": str(e), "data": []}
 
+#  @router.get("/{exchange}/{symbol}")
+#  async def get_single_market(exchange: str, symbol: str, category: str = None):
+
+
+#     exchange = exchange.strip().upper()
+#     symbol = symbol.strip().upper()
+#     category = category.strip().upper() if category else None
+
+#     if exchange not in ALLOWED_EXCHANGES:
+#         return {"error": f"Exchange must be one of {ALLOWED_EXCHANGES}", "data": {}}
+
+#     allowed_categories = CATEGORY_MAP.get(exchange, [])
+#     if category and category not in allowed_categories:
+#         return {"error": f"Category for {exchange} must be one of {allowed_categories}", "data": {}}
+
+#     item = None
+#     if exchange in ["FOREX", "CRYPTO", "COMEX"]:
+#         item = await get_quote_mt5(symbol)
+#     elif exchange == "OPTIONS":
+#         item = await get_quote_alpaca(symbol)
+#     # elif exchange == "FUTURES":
+#     #     item = await get_quote_fyers(symbol)
+
+#     if not item:
+#         return {
+#             "symbol": symbol,
+#             "exchange": exchange,
+#             "category": category,
+#             "bid": 0,
+#             "ask": 0,
+#             "last_price": 0,
+#             "timestamp": datetime.utcnow().isoformat(),
+#             "note": "Market data not found"
+#         }
+
+#     return item
+
+
+# @router.get("/{exchange}/{symbol}")
+# async def get_single_market(exchange: str, symbol: str, category: str = None):
+#     exchange = exchange.strip().upper()
+#     symbol = symbol.strip().upper()
+#     category = category.strip().upper() if category else None
+
+#     if exchange not in ALLOWED_EXCHANGES:
+#         return {"success": False, "error": f"Exchange must be one of {ALLOWED_EXCHANGES}"}
+
+#     allowed_categories = CATEGORY_MAP.get(exchange, [])
+#     if category and category not in allowed_categories:
+#         return {"success": False, "error": f"Category for {exchange} must be one of {allowed_categories}"}
+
+#     item = None
+#     if exchange in ["FOREX", "CRYPTO", "COMEX"]:
+#         item = await get_quote_mt5(symbol)
+#     elif exchange == "OPTIONS":
+#         item = await get_quote_alpaca(symbol)
+#     # elif exchange == "FUTURES":
+#     #     item = await get_quote_fyers(symbol)
+
+#     if not item:
+#         return {
+#             "success": False,
+#             "data": {
+#                 "symbol": symbol,
+#                 "exchange": exchange,
+#                 "name": "",
+#                 "sector": "",
+#                 "current_price": 0,
+#                 "day_change": 0,
+#                 "day_change_percentage": 0,
+#                 "open": 0,
+#                 "high": 0,
+#                 "low": 0,
+#                 "volume": 0,
+#                 "market_cap": 0
+#             },
+#             "note": "Market data not found"
+#         }
+
+#     # Map to marketSymbolResponse format
+#     mapped = {
+#         "symbol": item.get("symbol", symbol),
+#         "exchange": item.get("exchange", exchange),
+#         "name": item.get("name", ""),
+#         "sector": item.get("sector", ""),
+#         "current_price": item.get("last_price", 0),
+#         "day_change": item.get("day_change", 0),
+#         "day_change_percentage": item.get("day_change_percentage", 0),
+#         "open": item.get("open", 0),
+#         "high": item.get("high", 0),
+#         "low": item.get("low", 0),
+#         "volume": item.get("volume", 0),
+#         "market_cap": item.get("market_cap", 0),
+#     }
+
+#         return {"success": True, "data": mapped}
+
+
 @router.get("/{exchange}/{symbol}")
-async def get_single_market(exchange: str, symbol: str, category: str = None):
-    exchange = exchange.strip().upper()
-    symbol = symbol.strip().upper()
-    category = category.strip().upper() if category else None
+async def get_single_market(exchange: str, symbol: str, category: Optional[str] = None):
+    try:
+        exchange = exchange.strip().upper()
+        symbol = symbol.strip().upper()
+        category = category.strip().upper() if category else None
 
-    if exchange not in ALLOWED_EXCHANGES:
-        return {"error": f"Exchange must be one of {ALLOWED_EXCHANGES}", "data": {}}
+        # ✅ Validate exchange
+        if exchange not in ALLOWED_EXCHANGES:
+            return {
+                "success": False,
+                "error": f"Exchange must be one of {ALLOWED_EXCHANGES}"
+            }
 
-    allowed_categories = CATEGORY_MAP.get(exchange, [])
-    if category and category not in allowed_categories:
-        return {"error": f"Category for {exchange} must be one of {allowed_categories}", "data": {}}
+        # ✅ Validate category
+        allowed_categories = CATEGORY_MAP.get(exchange, [])
+        if category and category not in allowed_categories:
+            return {
+                "success": False,
+                "error": f"Category for {exchange} must be one of {allowed_categories}"
+            }
 
-    item = None
-    if exchange in ["FOREX", "CRYPTO", "COMEX"]:
-        item = await get_quote_mt5(symbol)
-    elif exchange == "OPTIONS":
-        item = await get_quote_alpaca(symbol)
-    # elif exchange == "FUTURES":
-    #     item = await get_quote_fyers(symbol)
+        # ✅ Fetch market data
+        item = None
+        if exchange in ["FOREX", "CRYPTO", "COMEX"]:
+            item = await get_quote_mt5(symbol)
+        elif exchange == "OPTIONS":
+            item = await get_quote_alpaca(symbol)
+        # elif exchange == "FUTURES":
+        #     item = await get_quote_fyers(symbol)
 
-    if not item:
-        return {
-            "symbol": symbol,
-            "exchange": exchange,
-            "category": category,
-            "bid": 0,
-            "ask": 0,
-            "last_price": 0,
-            "timestamp": datetime.utcnow().isoformat(),
-            "note": "Market data not found"
+        # ✅ Fallback response if no data found
+        if not item:
+            return {
+                "success": False,
+                "data": {
+                    "symbol": symbol,
+                    "exchange": exchange,
+                    "name": "",
+                    "sector": "",
+                    "current_price": 0,
+                    "day_change": 0,
+                    "day_change_percentage": 0,
+                    "open": 0,
+                    "high": 0,
+                    "low": 0,
+                    "volume": 0,
+                    "market_cap": 0
+                },
+                "note": "Market data not found"
+            }
+
+        # ✅ Map fields safely
+        mapped = {
+            "symbol": item.get("symbol", symbol),
+            "exchange": item.get("exchange", exchange),
+            "name": item.get("name", ""),
+            "sector": item.get("sector", ""),
+            "current_price": item.get("last_price", 0),
+            "day_change": item.get("day_change", 0),
+            "day_change_percentage": item.get("day_change_percentage", 0),
+            "open": item.get("open", 0),
+            "high": item.get("high", 0),
+            "low": item.get("low", 0),
+            "volume": item.get("volume", 0),
+            "market_cap": item.get("market_cap", 0),
         }
 
-    return item
+        return {"success": True, "data": mapped}
+
+    except Exception as e:
+        # ✅ Catch unexpected errors
+        return {"success": False, "error": str(e)}
