@@ -1021,10 +1021,11 @@ async def get_quote_alpaca(symbol: str):
         except Exception:
             name = ""
             exchange = "ALPACA"
-            
+
         return {
             "symbol": symbol,
-            "exchange": "ALPACA",
+            "exchange": exchange,
+            "name": name,
             "bid": float(getattr(quote, "bp", 0)),
             "ask": float(getattr(quote, "ap", 0)),
             "last_price": float(getattr(quote, "ap", 0)),  # use ask as last
