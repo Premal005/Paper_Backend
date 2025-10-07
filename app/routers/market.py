@@ -1055,10 +1055,36 @@ async def get_quote_fyers(symbol: str):
     except Exception:
         return None
 
+# async def get_quote_mt5(symbol: str):
+#     """
+#     Fetch quote from MT5 service running on localhost:8000
+#     """
+#     print(f"[DEBUG] Starting MT5 quote fetch for symbol: {symbol}")
+#     async with httpx.AsyncClient() as client:
+#         try:
+#             url = f"{MT5_SERVICE_URL}/symbol/{symbol}"
+#             print(f"[DEBUG] Sending GET request to MT5 service: {url}")
+#             response = await client.get(url)
+#             print(f"[DEBUG] Received response with status {response.status_code}")
+
+#             if response.status_code != 200:
+#                 print(f"[WARN] MT5 did not return data for {symbol}")
+#                 return None
+
+#             data = response.json()
+#             data.update({
+#                 "timestamp": datetime.utcnow().isoformat(),
+#                 "source": "MT5"
+#             })
+#             return data
+
+#         except Exception as e:
+#             print(f"[ERROR] Failed to fetch MT5 quote: {e}")
+
+#     print(f"[DEBUG] Returning None for symbol: {symbol} (no data fetched)")
+#     return None
+
 async def get_quote_mt5(symbol: str):
-    """
-    Fetch quote from MT5 service running on localhost:8000
-    """
     print(f"[DEBUG] Starting MT5 quote fetch for symbol: {symbol}")
     async with httpx.AsyncClient() as client:
         try:
@@ -1072,7 +1098,13 @@ async def get_quote_mt5(symbol: str):
                 return None
 
             data = response.json()
+
+            # ✅ Add exchange and last_price so search endpoint maps correctly
             data.update({
+                "last_price": (data.get("bid", 0) + data.get("ask", 0)) / 2,
+                "exchange": "MT5",
+                "name": symbol,
+                "sector": "CRYPTO" if symbol in ["BTC", "ETH", "XRP", "DOGE"] else "FOREX",
                 "timestamp": datetime.utcnow().isoformat(),
                 "source": "MT5"
             })
@@ -1083,6 +1115,8 @@ async def get_quote_mt5(symbol: str):
 
     print(f"[DEBUG] Returning None for symbol: {symbol} (no data fetched)")
     return None
+
+
 
 def clean_doc(doc: dict) -> dict:
     """Convert ObjectId to str so FastAPI can serialize it"""
