@@ -72,21 +72,61 @@ async def get_positions(rest_client: REST = Depends(get_rest_client)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# @router.get("/quote/{symbol}")
+# async def get_quote(symbol: str, rest_client: REST = Depends(get_rest_client)):
+#     try:
+#         quote = rest_client.get_latest_quote(symbol)
+#         return {
+#             "symbol": symbol,
+#             "ask_price": float(getattr(quote, "ap", None) or 0),
+#             "ask_size": getattr(quote, "as", None),
+#             "bid_price": float(getattr(quote, "bp", None) or 0),
+#             "bid_size": getattr(quote, "bs", None),
+#             "timestamp": datetime.utcnow().isoformat()
+#         }
+#     except Exception as e:
+#         logger.error(f"Error getting quote {symbol}: {e}", exc_info=True)
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+# In alpacaService.py - update the get_quote function
 @router.get("/quote/{symbol}")
 async def get_quote(symbol: str, rest_client: REST = Depends(get_rest_client)):
     try:
         quote = rest_client.get_latest_quote(symbol)
+        current_price = float(getattr(quote, "ap", None) or 0)
+        logger.info(f"{quote}")
+        # Calculate day change
+        day_change = 0.0
+        day_change_percentage = 0.0
+        
+        try:
+            # Get today's bars to find open price
+            today_bars = rest_client.get_bars(symbol, "1Day", limit=1).df
+            # logger.info(f"{today_bars}")
+            if not today_bars.empty:
+                open_price = today_bars['open'].iloc[0]
+                day_change = current_price - open_price
+                day_change_percentage = (day_change / open_price) * 100 if open_price > 0 else 0
+        except Exception as e:
+            logger.warning(f"Could not calculate day change for {symbol}: {e}")
+        
         return {
             "symbol": symbol,
-            "ask_price": float(getattr(quote, "ap", None) or 0),
+            "ask_price": current_price,
             "ask_size": getattr(quote, "as", None),
             "bid_price": float(getattr(quote, "bp", None) or 0),
             "bid_size": getattr(quote, "bs", None),
+            "last_price": current_price,
+            "day_change": day_change,
+            "day_change_percentage": day_change_percentage,
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
         logger.error(f"Error getting quote {symbol}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
 
 
 # ✅ Alpaca WebSocket Feed
@@ -121,7 +161,7 @@ async def start_alpaca_feed(
 
                 async for raw in ws:
                     msg = json.loads(raw)
-
+                    logger.info(f"{msg}")
                     if isinstance(msg, list):
                         for item in msg:
                             if item.get("T") == "success":
@@ -131,6 +171,7 @@ async def start_alpaca_feed(
                                 logger.info(f"📌 Subscription updated: {item}")
                                 continue
                             if item.get("T") == "q":
+                                
                                 tick = {
                                     "symbol": item.get("S"),
                                     "bid": item.get("bp"),

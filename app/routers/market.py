@@ -11,6 +11,11 @@ from app.models.marketModel import MarketData
 from app.services import alpacaService
 from app.services import fyerService
 
+
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["Market"])
 MT5_SERVICE_URL = "http://13.53.42.25:5000"  # Your MT5 FastAPI service URL
 # MT5_SERVICE_URL = "http://localhost:8000"
@@ -27,11 +32,46 @@ CATEGORY_MAP = {
 # ----------------------
 # Helper functions
 # ----------------------
+# async def get_quote_alpaca(symbol: str):
+#     try:
+#         rest = alpacaService.get_rest_client()
+#         quote = rest.get_latest_quote(symbol)
+#         logger.info(f"{quote}")
+#         try:
+#             asset = rest.get_asset(symbol)
+#             name = asset.name
+#             exchange = asset.exchange
+#         except Exception:
+#             name = ""
+#             exchange = "ALPACA"
+
+#         return {
+#             "symbol": symbol,
+#             "exchange": exchange,
+#             "name": name,
+#             "bid": float(getattr(quote, "bp", 0)),
+#             "ask": float(getattr(quote, "ap", 0)),
+#             "last_price": float(getattr(quote, "ap", 0)),  # use ask as last
+#             "timestamp": datetime.utcnow().isoformat(),
+#             "source": "ALPACA",
+#             "day_change": getattr(quote, "day_change",0),
+#             "day_change_percentage":getattr(quote, "day_change_percentage", 0),
+#         }
+#     except Exception:
+#         return None
+
+
 async def get_quote_alpaca(symbol: str):
     try:
         rest = alpacaService.get_rest_client()
         quote = rest.get_latest_quote(symbol)
-
+        # logger.info(f"{quote}")
+        
+        # Calculate current price (midpoint between bid and ask)
+        bid_price = float(getattr(quote, "bp", 0))
+        ask_price = float(getattr(quote, "ap", 0))
+        current_price = (bid_price + ask_price) / 2 if bid_price and ask_price else ask_price
+        
         try:
             asset = rest.get_asset(symbol)
             name = asset.name
@@ -40,18 +80,38 @@ async def get_quote_alpaca(symbol: str):
             name = ""
             exchange = "ALPACA"
 
+        # Calculate day change using historical data
+        day_change = 0.0
+        day_change_percentage = 0.0
+        
+        try:
+            # Get today's bars to find open price
+            today_bars = rest.get_bars(symbol, "1Day", limit=1).df
+            if not today_bars.empty:
+                open_price = today_bars['open'].iloc[0]
+                day_change = current_price - open_price
+                day_change_percentage = (day_change / open_price) * 100 if open_price > 0 else 0
+        except Exception as e:
+            logger.warning(f"Could not calculate day change for {symbol}: {e}")
+        # logger.info(f"{day_change}")
         return {
             "symbol": symbol,
             "exchange": exchange,
             "name": name,
-            "bid": float(getattr(quote, "bp", 0)),
-            "ask": float(getattr(quote, "ap", 0)),
-            "last_price": float(getattr(quote, "ap", 0)),  # use ask as last
+            "bid": bid_price,
+            "ask": ask_price,
+            "last_price": current_price,  # Use midpoint as last price
             "timestamp": datetime.utcnow().isoformat(),
-            "source": "ALPACA"
+            "source": "ALPACA",
+            "day_change": day_change,
+            "day_change_percentage": day_change_percentage,
         }
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error getting Alpaca quote for {symbol}: {e}")
         return None
+
+
+
 
 async def get_quote_fyers(symbol: str):
     
@@ -66,24 +126,12 @@ async def get_quote_fyers(symbol: str):
             "ask": doc.get("ask_price", 0),
             "last_price": doc.get("ltp", 0),
             "timestamp": datetime.utcnow().isoformat(),
-            "source": "FYERS"
+            "source": "FYERS",
+            "day_change": doc.get("day_change"),
+            "day_change_percentage":doc.get("day_change_percentage"),
         }
     except Exception:
         return None
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -101,6 +149,8 @@ async def get_quote_mt5(symbol: str):
                 return None
 
             data = response.json()
+            
+            # logger.info(f"{data}")
 
             # ✅ Add exchange and last_price so search endpoint maps correctly
             data.update({
@@ -109,7 +159,9 @@ async def get_quote_mt5(symbol: str):
                 "name": symbol,
                 "sector": "CRYPTO" if symbol in ["BTC", "ETH", "XRP", "DOGE"] else "FOREX",
                 "timestamp": datetime.utcnow().isoformat(),
-                "source": "MT5"
+                "source": "MT5",
+                "day_change": data.get("change"),
+                "day_change_percentage":data.get("day_change_percentage"),
             })
             return data
 

@@ -295,6 +295,12 @@ import pandas as pd
 import asyncio
 from config import settings
 
+
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 app = FastAPI(
     title="MT5 FastAPI Service",
     description="REST + WebSocket API for MetaTrader 5 operations",
@@ -320,6 +326,8 @@ class SymbolInfo(BaseModel):
     spread: float
     digits: int
     point: float
+    change: float
+    day_change_percentage: float
 
 class OrderRequest(BaseModel):
     symbol: str
@@ -464,6 +472,7 @@ async def ticks_ws(websocket: WebSocket, symbol: str):
         last_time = None
         while True:
             tick = mt5.symbol_info_tick(symbol)
+            # logger.info(f"{tick}")
             if tick and (last_time is None or tick.time != last_time):
                 data = {
                     "symbol": symbol,
@@ -471,8 +480,11 @@ async def ticks_ws(websocket: WebSocket, symbol: str):
                     "bid": tick.bid,
                     "ask": tick.ask,
                     "last": tick.last,
-                    "volume": tick.volume
+                    "volume": tick.volume,
+                    "open": tick.open,
+                    "change": tick.price_change
                 }
+                logger.info(f"🟢 Client connected: {data}")
                 await websocket.send_text(json.dumps(data))
                 last_time = tick.time
 
@@ -564,14 +576,16 @@ async def get_symbol_info(symbol_name: str, connection: MT5Connection = Depends(
     symbol_info = mt5.symbol_info(symbol_name)
     if symbol_info is None:
         raise HTTPException(status_code=404, detail=f"Symbol {symbol_name} not found")
-    
+    logger.info(f"{symbol_info}")
     return SymbolInfo(
         symbol=symbol_info.name,
         bid=symbol_info.bid,
         ask=symbol_info.ask,
         spread=symbol_info.spread,
         digits=symbol_info.digits,
-        point=symbol_info.point
+        point=symbol_info.point,
+        change=symbol_info.price_change,
+        day_change_percentage= (symbol_info.price_change/(symbol_info.bid-symbol_info.price_change)*100)
     )
 
 @app.get("/rates/{symbol}")

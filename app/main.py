@@ -141,6 +141,7 @@ async def market_ws(ws: WebSocket):
         await ws.close()
 
 
+
 # ---- Register Routers ----
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(market.router, prefix="/api/market", tags=["market"])
@@ -159,35 +160,12 @@ async def root():
     return {"message": "Paper Trading Backend is running..."}
 
 
-# ---- Fyers Login ----
-# @app.get("/fyers/login")
-# async def fyers_login():
-#     from broker.fyers_service import CLIENT_ID, REDIRECT_URI
-#     login_url = (
-#         f"https://myapi.fyers.in/api/v3/generate-authcode?client_id={CLIENT_ID}"
-#         f"&redirect_uri={REDIRECT_URI}&response_type=code&state=sample"
-#     )
-#     return RedirectResponse(login_url)
-
-
-# @app.get("/fyers/callback")
-# async def fyers_callback(request: Request):
-#     from broker.fyers_service import exchange_auth_code
-#     code = request.query_params.get("code")
-#     if not code:
-#         return JSONResponse({"error": "Missing code"}, status_code=400)
-#     try:
-#         token_data = await exchange_auth_code(code)
-#         return {"msg": "Token saved successfully", "token": token_data}
-#     except Exception as e:
-#         return JSONResponse({"error": str(e)}, status_code=500)
-
 
 # ---- Startup ----
 @app.on_event("startup")
 async def startup_event():
     logger.info("🚀 Starting Paper Trading Backend...")
-
+    # watchlist.start_watchlist_updater(app)
     async def start_alpaca():
         # Pass globals so Alpaca WS can update
         await alpacaService.start_alpaca_feed(
@@ -216,6 +194,9 @@ async def startup_event():
     # Start processing Fyers messages
     asyncio.create_task(fyerService.process_fyers_messages())
 
+    from app.routers import watchlist
+    watchlist.start_watchlist_updater(loop)
+    
     logger.info("✅ Feeds launched")
 
     def handle_exception(loop, context):

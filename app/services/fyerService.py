@@ -296,6 +296,40 @@ MAIN_LOOP: asyncio.AbstractEventLoop | None = None
 # -----------------------
 # Fyers WebSocket callbacks
 # -----------------------
+# def onmessage(message):
+#     """Handle incoming Fyers tick data and put it in a queue."""
+#     try:
+#         # logger.info(f"Raw Fyers message: {message}")
+
+#         if "ltp" not in message:
+#             return
+
+#         epoch_time = message.get("last_traded_time", int(datetime.utcnow().timestamp()))
+#         dt_str = datetime.fromtimestamp(epoch_time).strftime("%Y-%m-%d %H:%M:%S")
+
+#         data = {
+#             "symbol": message.get("symbol"),
+#             "ltp": message.get("ltp"),
+#             "high": message.get("high_price"),
+#             "low": message.get("low_price"),
+#             "open": message.get("open_price"),
+#             "close": message.get("prev_close_price"),
+#             "timestamp": dt_str
+#         }
+
+#         # Put message in queue for main thread to process
+#         message_queue.put(data)
+        
+#         # Immediate CSV logging (thread-safe)
+#         df = pd.DataFrame([data])
+#         df.to_csv(csv_file, mode="a", header=not os.path.exists(csv_file), index=False)
+#         # logger.info(f"📈 {data['symbol']} | LTP: {data['ltp']}")
+
+#     except Exception as e:
+#         logger.error(f"onmessage error: {e}")
+
+
+
 def onmessage(message):
     """Handle incoming Fyers tick data and put it in a queue."""
     try:
@@ -307,13 +341,26 @@ def onmessage(message):
         epoch_time = message.get("last_traded_time", int(datetime.utcnow().timestamp()))
         dt_str = datetime.fromtimestamp(epoch_time).strftime("%Y-%m-%d %H:%M:%S")
 
+        current_price = message.get("ltp")
+        open_price = message.get("open_price", 0)
+        
+        # Calculate day change
+        day_change = 0.0
+        day_change_percentage = 0.0
+        
+        if open_price and open_price > 0:
+            day_change = current_price - open_price
+            day_change_percentage = (day_change / open_price) * 100
+
         data = {
             "symbol": message.get("symbol"),
-            "ltp": message.get("ltp"),
+            "ltp": current_price,
             "high": message.get("high_price"),
             "low": message.get("low_price"),
-            "open": message.get("open_price"),
+            "open": open_price,
             "close": message.get("prev_close_price"),
+            "day_change": day_change,
+            "day_change_percentage": day_change_percentage,
             "timestamp": dt_str
         }
 
@@ -323,10 +370,13 @@ def onmessage(message):
         # Immediate CSV logging (thread-safe)
         df = pd.DataFrame([data])
         df.to_csv(csv_file, mode="a", header=not os.path.exists(csv_file), index=False)
-        # logger.info(f"📈 {data['symbol']} | LTP: {data['ltp']}")
+        # logger.info(f"📈 {data['symbol']} | LTP: {data['ltp']} | Change: {day_change_percentage:.2f}%")
 
     except Exception as e:
         logger.error(f"onmessage error: {e}")
+
+
+
 
 
 async def process_fyers_messages():
