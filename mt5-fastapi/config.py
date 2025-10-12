@@ -5,9 +5,9 @@ load_dotenv()
 
 class Settings:
     # MT5 Configuration
-    MT5_PATH = os.getenv("MT5_PATH", "C:/Program Files/MetaTrader 5/terminal64.exe")
+    MT5_PATH = os.getenv("MT5_PATH", "C:\Program Files\Pepperstone MetaTrader 5\terminal64.exe")
     MT5_LOGIN = int(os.getenv("MT5_LOGIN", 12345678))
-    MT5_PASSWORD = os.getenv("MT5_PASSWORD", "your_password")
+    MT5_PASSWORD = "hMwdfpob0("
     MT5_SERVER = os.getenv("MT5_SERVER", "YourBrokerServer")
     
     # API Configuration
