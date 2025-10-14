@@ -1,200 +1,159 @@
-# import asyncio
-# import json
-# import logging
-# from datetime import datetime
-# from typing import Any, Callable, Set
-
-# import websockets
-# from motor.motor_asyncio import AsyncIOMotorClient
-
-# logger = logging.getLogger(__name__)
-
-# # MongoDB Setup
-# MONGO_URI = "mongodb+srv://<user>:<pass>@cluster.mongodb.net/?retryWrites=true&w=majority"
-# DB_NAME = "market_data"
-# mongo_client = AsyncIOMotorClient(MONGO_URI)
-# db = mongo_client[DB_NAME]
-# market_data = db["fyers"]
-
-# async def start_fyers_feed(
-#     broadcast: Callable[[Any], None] = None,
-#     subscribed_symbols: Set[str] = None,
-# ):
-#     import os
-
-#     FYERS_ACCESS_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiZDoxIiwiZDoyIiwieDowIiwieDoxIl0sImF0X2hhc2giOiJnQUFBQUFCbzZwRF9FT3ZTMnBYSHl5X3ZMZUl3NDl0dkhJMGZnX0VZNmJ1MGJ3YTVaTTlRZzNmLXpWUXdKckNYbU9NZWk2MktnMUl0cEo5MlRFdjIzQk5FQ19PNzJuSWktUXhRUHlLT3VNME1kcGxkQ082cGZmaz0iLCJkaXNwbGF5X25hbWUiOiIiLCJvbXMiOiJLMSIsImhzbV9rZXkiOiJlN2ZhZmU2OTdmNTQ4MGNjZjk3M2RjZDVmNzJmYTAwNDgxNjNkNTBiMWJiMTBlM2I2NzgxN2U4YyIsImlzRGRwaUVuYWJsZWQiOiJOIiwiaXNNdGZFbmFibGVkIjoiTiIsImZ5X2lkIjoiRkFENDE5MTIiLCJhcHBUeXBlIjoxMDAsImV4cCI6MTc2MDIyOTAwMCwiaWF0IjoxNzYwMjAzMDA3LCJpc3MiOiJhcGkuZnllcnMuaW4iLCJuYmYiOjE3NjAyMDMwMDcsInN1YiI6ImFjY2Vzc190b2tlbiJ9.cPwrP2BC2ezDmip3pDzBaJ0aVXl4ryarzRADiww4vhw"
-#     FYERS_WS = "wss://api.fyers.in/socket/v3/data"
-
-#     if not FYERS_ACCESS_TOKEN:
-#         logger.warning("⚠️ FYERS_ACCESS_TOKEN not set. Please update your .env daily.")
-#         return
-
-#     symbols = subscribed_symbols or {"NSE:NIFTY50-INDEX", "NSE:BANKNIFTY-INDEX"}
-#     retry_delay = 5  # initial backoff in seconds
-#     max_backoff = 300  # max backoff = 5 min
-
-#     while True:
-#         url = f"{FYERS_WS}{FYERS_ACCESS_TOKEN}"
-#         logger.info(f"🔌 Connecting to Fyers WS: {url}")
-
-#         try:
-#             async with websockets.connect(url) as ws:
-#                 logger.info("✅ Connected to Fyers WebSocket")
-#                 retry_delay = 5  # reset backoff after successful connection
-
-#                 # Subscribe to symbols
-#                 sub_msg = {"symbol": list(symbols)}
-#                 await ws.send(json.dumps(sub_msg))
-#                 logger.info(f"📡 Subscribed to symbols: {symbols}")
-
-#                 async for raw_msg in ws:
-#                     try:
-#                         msg = json.loads(raw_msg)
-#                         tick = normalize_fyers_message(msg)
-#                         if not tick or not tick.get("symbol"):
-#                             continue
-
-#                         # Save/update MongoDB
-#                         await market_data.update_one(
-#                             {"symbol": tick["symbol"], "exchange": "FYERS"},
-#                             {"$set": {
-#                                 "brokerSymbol": tick["brokerSymbol"],
-#                                 "instrumentType": tick["instrumentType"],
-#                                 "ltp": tick["ltp"],
-#                                 "bid": tick["bid"],
-#                                 "ask": tick["ask"],
-#                                 "volume": tick["volume"],
-#                                 "oi": tick["oi"],
-#                                 "updatedAt": datetime.utcnow(),
-#                             }},
-#                             upsert=True
-#                         )
-
-#                         if broadcast:
-#                             await broadcast({**tick, "source": "FYERS"})
-
-#                     except Exception as e:
-#                         logger.error(f"❌ Error processing Fyers message: {e}")
-
-#         except websockets.exceptions.InvalidStatusCode as e:
-#             if e.status_code == 503:
-#                 logger.warning(f"🚨 Fyers WS 503 - server busy. Retrying in {retry_delay}s...")
-#             else:
-#                 logger.error(f"🚨 Fyers WS rejected: {e.status_code} - {e}")
-
-#         except Exception as e:
-#             logger.error(f"🚨 Fyers WS connection error: {e}")
-
-#         # Exponential backoff for reconnect
-#         logger.info(f"♻️ Reconnecting to Fyers WS in {retry_delay}s...")
-#         await asyncio.sleep(retry_delay)
-#         retry_delay = min(retry_delay * 2, max_backoff)
-
-
-# def normalize_fyers_message(msg: dict):
-#     """Normalize Fyers WS message"""
-#     try:
-#         return {
-#             "symbol": msg.get("s") or msg.get("symbol"),
-#             "exchange": "FYERS",
-#             "brokerSymbol": msg.get("s"),
-#             "instrumentType": msg.get("instrumentType", "Futures"),
-#             "ltp": (msg.get("ltpc", {}).get("ltp") if msg.get("ltpc") else msg.get("ltp")),
-#             "bid": (msg.get("ltpc", {}).get("bid") if msg.get("ltpc") else None),
-#             "ask": (msg.get("ltpc", {}).get("ask") if msg.get("ltpc") else None),
-#             "volume": msg.get("vol"),
-#             "oi": msg.get("oi"),
-#             "timestamp": datetime.utcnow().timestamp(),
-#         }
-#     except Exception as e:
-#         logger.warning(f"⚠️ Normalization failed: {e}")
-#         return None
-# app/services/fyerService.py
-
 
 # # fyerService.py
 # import os
 # import pandas as pd
 # from datetime import datetime
 # import logging
+# import threading
 # import time
 # import asyncio
 # from fyers_apiv3.FyersWebsocket import data_ws
 # from motor.motor_asyncio import AsyncIOMotorClient
 # from dotenv import load_dotenv
 
+# # -----------------------
+# # Logging setup
+# # -----------------------
 # logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO)
 # load_dotenv()
 
-# # --- Global configs ---
-# csv_file = 'LiveData.csv'
 
-# # --- Fyers credentials from environment variables ---
+# import queue
+
+# # Add this near the top with other global configs
+# message_queue = queue.Queue()
+
+
+# # -----------------------
+# # Global configs
+# # -----------------------
+# csv_file = "LiveData.csv"
+
+# # Fyers credentials
 # access_token = os.getenv("FYERS_ACCESS_TOKEN")
 # if not access_token:
-#     raise ValueError("FYERS_ACCESS_TOKEN not set in environment variables")
+#     raise ValueError("FYERS_ACCESS_TOKEN not set")
 
-# client_id = os.getenv("CLIENT_ID")
-# if not client_id:
-#     raise ValueError("FYERS_CLIENT_ID not set in environment variables")
-
-# # --- MongoDB setup ---
+# # MongoDB setup
 # MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 # mongo_client = AsyncIOMotorClient(MONGO_URI)
 # market_data = mongo_client["paper_trading"]["market_data"]
 
-# # --- Asyncio loop reference ---
-# MAIN_LOOP = asyncio.get_event_loop()
-
-# # Optional: WebSocket broadcast function (set from main.py)
+# # Async broadcast function (from main.py)
 # broadcast_func = None
 
-# # ---------------------------
+# # Main asyncio loop reference (set from main.py)
+# MAIN_LOOP: asyncio.AbstractEventLoop | None = None
+
+# # -----------------------
 # # Fyers WebSocket callbacks
-# # ---------------------------
+# # -----------------------
+# # def onmessage(message):
+# #     """Handle incoming Fyers tick data and put it in a queue."""
+# #     try:
+# #         # logger.info(f"Raw Fyers message: {message}")
+
+# #         if "ltp" not in message:
+# #             return
+
+# #         epoch_time = message.get("last_traded_time", int(datetime.utcnow().timestamp()))
+# #         dt_str = datetime.fromtimestamp(epoch_time).strftime("%Y-%m-%d %H:%M:%S")
+
+# #         data = {
+# #             "symbol": message.get("symbol"),
+# #             "ltp": message.get("ltp"),
+# #             "high": message.get("high_price"),
+# #             "low": message.get("low_price"),
+# #             "open": message.get("open_price"),
+# #             "close": message.get("prev_close_price"),
+# #             "timestamp": dt_str
+# #         }
+
+# #         # Put message in queue for main thread to process
+# #         message_queue.put(data)
+        
+# #         # Immediate CSV logging (thread-safe)
+# #         df = pd.DataFrame([data])
+# #         df.to_csv(csv_file, mode="a", header=not os.path.exists(csv_file), index=False)
+# #         # logger.info(f"📈 {data['symbol']} | LTP: {data['ltp']}")
+
+# #     except Exception as e:
+# #         logger.error(f"onmessage error: {e}")
+
+
 
 # def onmessage(message):
-#     """Handle incoming Fyers tick data safely in the main asyncio loop."""
+#     """Handle incoming Fyers tick data and put it in a queue."""
 #     try:
+#         # logger.info(f"Raw Fyers message: {message}")
+
 #         if "ltp" not in message:
 #             return
 
-#         epoch_time = message["last_traded_time"]
+#         epoch_time = message.get("last_traded_time", int(datetime.utcnow().timestamp()))
 #         dt_str = datetime.fromtimestamp(epoch_time).strftime("%Y-%m-%d %H:%M:%S")
 
+#         current_price = message.get("ltp")
+#         open_price = message.get("open_price", 0)
+        
+#         # Calculate day change
+#         day_change = 0.0
+#         day_change_percentage = 0.0
+        
+#         if open_price and open_price > 0:
+#             day_change = current_price - open_price
+#             day_change_percentage = (day_change / open_price) * 100
+
 #         data = {
-#             "symbol": message["symbol"],
-#             "ltp": message["ltp"],
-#             "high": message["high_price"],
-#             "low": message["low_price"],
-#             "open": message["open_price"],
-#             "close": message["prev_close_price"],
+#             "symbol": message.get("symbol"),
+#             "ltp": current_price,
+#             "high": message.get("high_price"),
+#             "low": message.get("low_price"),
+#             "open": open_price,
+#             "close": message.get("prev_close_price"),
+#             "day_change": day_change,
+#             "day_change_percentage": day_change_percentage,
 #             "timestamp": dt_str
 #         }
 
-#         # Schedule MongoDB update in main loop
-#         asyncio.run_coroutine_threadsafe(
-#             market_data.update_one(
-#                 {"symbol": data["symbol"]},
-#                 {"$set": data},
-#                 upsert=True
-#             ),
-#             MAIN_LOOP
-#         )
-
-#         # Append to CSV
+#         # Put message in queue for main thread to process
+#         message_queue.put(data)
+        
+#         # Immediate CSV logging (thread-safe)
 #         df = pd.DataFrame([data])
-#         df.to_csv(csv_file, mode='a', header=not os.path.exists(csv_file), index=False)
-
-#         # Optional: broadcast to connected WebSocket clients
-#         if broadcast_func:
-#             asyncio.run_coroutine_threadsafe(broadcast_func(data), MAIN_LOOP)
-
-#         logger.info(f"📈 {data['symbol']} | LTP: {data['ltp']}")
+#         df.to_csv(csv_file, mode="a", header=not os.path.exists(csv_file), index=False)
+#         # logger.info(f"📈 {data['symbol']} | LTP: {data['ltp']} | Change: {day_change_percentage:.2f}%")
 
 #     except Exception as e:
 #         logger.error(f"onmessage error: {e}")
+
+
+
+
+
+# async def process_fyers_messages():
+#     """Process Fyers messages from the queue in the main asyncio loop."""
+#     while True:
+#         try:
+#             # Non-blocking queue get with timeout
+#             data = message_queue.get_nowait()
+            
+#             # Process in main asyncio context
+#             await market_data.update_one(
+#                 {"symbol": data["symbol"]}, 
+#                 {"$set": data}, 
+#                 upsert=True
+#             )
+            
+#             if broadcast_func:
+#                 await broadcast_func(data)
+                
+#         except queue.Empty:
+#             # No messages in queue, sleep a bit
+#             await asyncio.sleep(0.1)
+#         except Exception as e:
+#             logger.error(f"Error processing Fyers message: {e}")
 
 
 # def onerror(message):
@@ -205,48 +164,72 @@
 #     logger.info(f"Fyers WS closed: {message}")
 
 
-# def onopen():
-#     """Subscribe to symbols when WebSocket connects."""
-#     symbols = ['NSE:RELIANCE-EQ', 'NSE:ITC-EQ']
-#     data_type = "SymbolUpdate"
-#     fyers.subscribe(symbols=symbols, data_type=data_type)
-#     fyers.keep_running()
 
 
-# # ---------------------------
-# # Fyers WebSocket setup
-# # ---------------------------
-
-# fyers = data_ws.FyersDataSocket(
-#     access_token=access_token,
-#     log_path="",           # logs saved in current folder
-#     litemode=False,
-#     write_to_file=False,
-#     reconnect=True,
-#     on_connect=onopen,
-#     on_close=onclose,
-#     on_error=onerror,
-#     on_message=onmessage
-# )
 
 
-# def start_fyers_feed(broadcast=None, subscribed_symbols=None):
+
+# # -----------------------
+# # Start Fyers WebSocket
+# # -----------------------
+# def start_fyers_feed(broadcast=None, main_loop=None, subscribed_symbols=None):
 #     """
-#     Start the Fyers WebSocket in a separate thread.
+#     Start Fyers WebSocket in a separate thread.
 #     :param broadcast: async function to broadcast messages to clients
-#     :param subscribed_symbols: optional, list of symbols to subscribe
+#     :param main_loop: main asyncio loop (required for thread-safe updates)
+#     :param subscribed_symbols: list of symbols to subscribe
 #     """
-#     global broadcast_func
+#     global broadcast_func, MAIN_LOOP
 #     broadcast_func = broadcast
 
-#     import threading
+#     if main_loop is None:
+#         raise ValueError("main_loop must be passed")
+#     MAIN_LOOP = main_loop
 
-#     thread = threading.Thread(target=fyers.connect, daemon=True)
+#     if not subscribed_symbols:
+#         subscribed_symbols = ["NSE:RELIANCE-EQ", "NSE:ITC-EQ"]
+
+#     # -----------------------
+#     # Fyers connect callback
+#     # -----------------------
+#     def on_connect():
+#         fyers.subscribe(symbols=subscribed_symbols, data_type="SymbolUpdate")
+#         fyers.keep_running()
+#         logger.info("✅ Fyers WS subscribed and running")
+
+#     # -----------------------
+#     # Create Fyers WebSocket
+#     # -----------------------
+#     global fyers
+#     fyers = data_ws.FyersDataSocket(
+#         access_token=access_token,
+#         log_path="",
+#         litemode=False,
+#         write_to_file=False,
+#         reconnect=True,
+#         on_connect=on_connect,
+#         on_close=onclose,
+#         on_error=onerror,
+#         on_message=onmessage
+#     )
+
+#     # -----------------------
+#     # Run WebSocket in daemon thread
+#     # -----------------------
+#     def run_ws():
+#         try:
+#             fyers.connect()
+#         except Exception as e:
+#             logger.error(f"Fyers WS failed: {e}")
+
+#     thread = threading.Thread(target=run_ws, daemon=True)
 #     thread.start()
 #     time.sleep(2)
-#     logger.info("✅ Fyers WebSocket Connected")
+#     logger.info("✅ Fyers WebSocket Connected (thread-safe)")
 
-# fyerService.py
+
+
+
 import os
 import pandas as pd
 from datetime import datetime
@@ -254,6 +237,7 @@ import logging
 import threading
 import time
 import asyncio
+import queue
 from fyers_apiv3.FyersWebsocket import data_ws
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
@@ -265,12 +249,8 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
-
-import queue
-
-# Add this near the top with other global configs
+# Message queue for thread-safe processing
 message_queue = queue.Queue()
-
 
 # -----------------------
 # Global configs
@@ -294,55 +274,61 @@ broadcast_func = None
 MAIN_LOOP: asyncio.AbstractEventLoop | None = None
 
 # -----------------------
+# FYERS Symbol Format Helper
+# -----------------------
+
+def get_fyers_symbol_format(symbol: str, instrument_type: str = "EQ") -> str:
+    """
+    Convert symbol to FYERS format based on instrument type
+    Formats:
+    - Equity: NSE:SYMBOL-EQ
+    - Futures: NSE:SYMBOLYYMMFUT
+    - Options: NSE:SYMBOLYYMMSTRIKEPE/C
+    """
+    symbol = symbol.upper().strip()
+    
+    if instrument_type == "FUTURES":
+        # Example: RELIANCE Sep 2024 -> NSE:RELIANCE24SEPFUT
+        # You'll need to implement date parsing based on your symbol format
+        return f"NSE:{symbol}FUT"  # Adjust based on your futures symbol format
+    
+    elif instrument_type == "OPTIONS":
+        # Example: RELIANCE 1500 CE Sep 2024 -> NSE:RELIANCE24SEP1500CE
+        return f"NSE:{symbol}"  # Adjust based on your options symbol format
+    
+    else:  # EQ - Equity
+        return f"NSE:{symbol}-EQ"
+
+# -----------------------
 # Fyers WebSocket callbacks
 # -----------------------
-# def onmessage(message):
-#     """Handle incoming Fyers tick data and put it in a queue."""
-#     try:
-#         # logger.info(f"Raw Fyers message: {message}")
-
-#         if "ltp" not in message:
-#             return
-
-#         epoch_time = message.get("last_traded_time", int(datetime.utcnow().timestamp()))
-#         dt_str = datetime.fromtimestamp(epoch_time).strftime("%Y-%m-%d %H:%M:%S")
-
-#         data = {
-#             "symbol": message.get("symbol"),
-#             "ltp": message.get("ltp"),
-#             "high": message.get("high_price"),
-#             "low": message.get("low_price"),
-#             "open": message.get("open_price"),
-#             "close": message.get("prev_close_price"),
-#             "timestamp": dt_str
-#         }
-
-#         # Put message in queue for main thread to process
-#         message_queue.put(data)
-        
-#         # Immediate CSV logging (thread-safe)
-#         df = pd.DataFrame([data])
-#         df.to_csv(csv_file, mode="a", header=not os.path.exists(csv_file), index=False)
-#         # logger.info(f"📈 {data['symbol']} | LTP: {data['ltp']}")
-
-#     except Exception as e:
-#         logger.error(f"onmessage error: {e}")
-
-
 
 def onmessage(message):
     """Handle incoming Fyers tick data and put it in a queue."""
     try:
-        # logger.info(f"Raw Fyers message: {message}")
+        logger.debug(f"Raw Fyers message: {message}")
 
-        if "ltp" not in message:
+        # Check if this is a valid tick message
+        if "ltp" not in message and "lp" not in message:
             return
 
-        epoch_time = message.get("last_traded_time", int(datetime.utcnow().timestamp()))
-        dt_str = datetime.fromtimestamp(epoch_time).strftime("%Y-%m-%d %H:%M:%S")
-
-        current_price = message.get("ltp")
-        open_price = message.get("open_price", 0)
+        # Extract symbol and determine instrument type
+        symbol = message.get("symbol", "")
+        instrument_type = "EQ"  # Default to equity
+        
+        # Detect instrument type from symbol
+        if "FUT" in symbol:
+            instrument_type = "FUTURES"
+        elif "CE" in symbol or "PE" in symbol:
+            instrument_type = "OPTIONS"
+        
+        # Extract prices with fallbacks for different message formats
+        current_price = message.get("ltp") or message.get("lp") or 0
+        open_price = message.get("open_price") or message.get("price_open") or 0
+        high_price = message.get("high_price") or message.get("high") or 0
+        low_price = message.get("low_price") or message.get("low") or 0
+        close_price = message.get("prev_close_price") or message.get("close") or 0
+        volume = message.get("vol_traded") or message.get("volume") or 0
         
         # Calculate day change
         day_change = 0.0
@@ -352,16 +338,22 @@ def onmessage(message):
             day_change = current_price - open_price
             day_change_percentage = (day_change / open_price) * 100
 
+        epoch_time = message.get("last_traded_time", int(datetime.utcnow().timestamp()))
+        dt_str = datetime.fromtimestamp(epoch_time).strftime("%Y-%m-%d %H:%M:%S")
+
         data = {
-            "symbol": message.get("symbol"),
+            "symbol": symbol,
+            "instrument_type": instrument_type,
             "ltp": current_price,
-            "high": message.get("high_price"),
-            "low": message.get("low_price"),
+            "high": high_price,
+            "low": low_price,
             "open": open_price,
-            "close": message.get("prev_close_price"),
+            "close": close_price,
+            "volume": volume,
             "day_change": day_change,
             "day_change_percentage": day_change_percentage,
-            "timestamp": dt_str
+            "timestamp": dt_str,
+            "source": "FYERS"
         }
 
         # Put message in queue for main thread to process
@@ -370,14 +362,10 @@ def onmessage(message):
         # Immediate CSV logging (thread-safe)
         df = pd.DataFrame([data])
         df.to_csv(csv_file, mode="a", header=not os.path.exists(csv_file), index=False)
-        # logger.info(f"📈 {data['symbol']} | LTP: {data['ltp']} | Change: {day_change_percentage:.2f}%")
+        # logger.info(f"📈 {data['symbol']} | LTP: {data['ltp']} | Type: {instrument_type}")
 
     except Exception as e:
         logger.error(f"onmessage error: {e}")
-
-
-
-
 
 async def process_fyers_messages():
     """Process Fyers messages from the queue in the main asyncio loop."""
@@ -402,23 +390,16 @@ async def process_fyers_messages():
         except Exception as e:
             logger.error(f"Error processing Fyers message: {e}")
 
-
 def onerror(message):
     logger.error(f"Fyers WS error: {message}")
-
 
 def onclose(message):
     logger.info(f"Fyers WS closed: {message}")
 
-
-
-
-
-
-
 # -----------------------
 # Start Fyers WebSocket
 # -----------------------
+
 def start_fyers_feed(broadcast=None, main_loop=None, subscribed_symbols=None):
     """
     Start Fyers WebSocket in a separate thread.
@@ -433,8 +414,19 @@ def start_fyers_feed(broadcast=None, main_loop=None, subscribed_symbols=None):
         raise ValueError("main_loop must be passed")
     MAIN_LOOP = main_loop
 
+    # Default symbols if none provided
     if not subscribed_symbols:
-        subscribed_symbols = ["NSE:RELIANCE-EQ", "NSE:ITC-EQ"]
+        subscribed_symbols = [
+            # Equity
+            "NSE:RELIANCE-EQ", 
+            "NSE:TCS-EQ",
+            # Futures (example formats)
+            "NSE:BANKNIFTY24SEPFUT",  # BANKNIFTY Sep 2024 Futures
+            "NSE:NIFTY24SEPFUT",      # NIFTY Sep 2024 Futures
+            # Options (example formats)  
+            "NSE:BANKNIFTY2422945000CE",  # BANKNIFTY 45000 CE
+            "NSE:BANKNIFTY2422945000PE",  # BANKNIFTY 45000 PE
+        ]
 
     # -----------------------
     # Fyers connect callback
@@ -442,7 +434,7 @@ def start_fyers_feed(broadcast=None, main_loop=None, subscribed_symbols=None):
     def on_connect():
         fyers.subscribe(symbols=subscribed_symbols, data_type="SymbolUpdate")
         fyers.keep_running()
-        logger.info("✅ Fyers WS subscribed and running")
+        logger.info(f"✅ Fyers WS subscribed to {len(subscribed_symbols)} symbols")
 
     # -----------------------
     # Create Fyers WebSocket
@@ -473,3 +465,34 @@ def start_fyers_feed(broadcast=None, main_loop=None, subscribed_symbols=None):
     thread.start()
     time.sleep(2)
     logger.info("✅ Fyers WebSocket Connected (thread-safe)")
+
+# -----------------------
+# Helper function to get FYERS quote
+# -----------------------
+async def get_quote_fyers(symbol: str):
+    try:
+        # Try exact match first
+        doc = await market_data.find_one({"symbol": symbol.upper()})
+        if not doc:
+            return None
+        
+        return {
+            "symbol": doc.get("symbol", symbol),
+            "exchange": "FYERS",
+            "name": doc.get("symbol", symbol),  # Use symbol as name if not available
+            "bid": doc.get("ltp", 0),  # FYERS doesn't always provide bid/ask in WS
+            "ask": doc.get("ltp", 0),
+            "last_price": doc.get("ltp", 0),
+            "open": doc.get("open", 0),
+            "high": doc.get("high", 0),
+            "low": doc.get("low", 0),
+            "close": doc.get("close", 0),
+            "volume": doc.get("volume", 0),
+            "timestamp": datetime.utcnow().isoformat(),
+            "source": "FYERS",
+            "day_change": doc.get("day_change", 0),
+            "day_change_percentage": doc.get("day_change_percentage", 0),
+        }
+    except Exception as e:
+        logger.error(f"Error getting FYERS quote: {e}")
+        return None

@@ -113,24 +113,70 @@ async def get_quote_alpaca(symbol: str):
 
 
 
-async def get_quote_fyers(symbol: str):
+# async def get_quote_fyers(symbol: str):
     
+#     try:
+#         doc = await fyerService.market_data.find_one({"symbol": symbol.upper()})
+#         if not doc:
+#             return None
+#         return {
+#             "symbol": doc.get("symbol", symbol),
+#             "exchange": "FYERS",
+#             "bid": doc.get("bid_price", 0),
+#             "ask": doc.get("ask_price", 0),
+#             "last_price": doc.get("ltp", 0),
+#             "timestamp": datetime.utcnow().isoformat(),
+#             "source": "FYERS",
+#             "day_change": doc.get("day_change"),
+#             "day_change_percentage":doc.get("day_change_percentage"),
+#         }
+#     except Exception:
+#         return None
+
+
+async def get_quote_fyers(symbol: str):
     try:
-        doc = await fyerService.market_data.find_one({"symbol": symbol.upper()})
+        # Convert symbol to FYERS format if needed
+        fyers_symbol = symbol
+        if ":" not in symbol and "-" not in symbol:
+            # Assume it's a basic symbol, try different formats
+            possible_symbols = [
+                f"NSE:{symbol}-EQ",  # Equity
+                f"NSE:{symbol}FUT",  # Futures  
+                f"NSE:{symbol}CE",   # Call Options
+                f"NSE:{symbol}PE",   # Put Options
+            ]
+            
+            for possible_symbol in possible_symbols:
+                doc = await fyerService.market_data.find_one({"symbol": possible_symbol})
+                if doc:
+                    fyers_symbol = possible_symbol
+                    break
+        else:
+            doc = await fyerService.market_data.find_one({"symbol": symbol.upper()})
+        
         if not doc:
             return None
+            
         return {
             "symbol": doc.get("symbol", symbol),
-            "exchange": "FYERS",
-            "bid": doc.get("bid_price", 0),
-            "ask": doc.get("ask_price", 0),
+            "exchange": "FYERS", 
+            "name": doc.get("symbol", symbol),
+            "bid": doc.get("ltp", 0),
+            "ask": doc.get("ltp", 0), 
             "last_price": doc.get("ltp", 0),
+            "open": doc.get("open", 0),
+            "high": doc.get("high", 0),
+            "low": doc.get("low", 0),
+            "close": doc.get("close", 0),
+            "volume": doc.get("volume", 0),
             "timestamp": datetime.utcnow().isoformat(),
             "source": "FYERS",
-            "day_change": doc.get("day_change"),
-            "day_change_percentage":doc.get("day_change_percentage"),
+            "day_change": doc.get("day_change", 0),
+            "day_change_percentage": doc.get("day_change_percentage", 0),
         }
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error getting FYERS quote for {symbol}: {e}")
         return None
 
 
@@ -207,7 +253,7 @@ def clean_doc(doc: dict) -> dict:
 @router.get("/search")
 async def search_symbol(symbol: str = Query(..., min_length=1)):
     symbol = symbol.upper()
-    result = await get_quote_alpaca(symbol) or await get_quote_fyers(symbol) or await get_quote_mt5(symbol)
+    result = await get_quote_fyers(symbol) or await get_quote_mt5(symbol) or await get_quote_alpaca(symbol) 
 
     if not result:
         return []
