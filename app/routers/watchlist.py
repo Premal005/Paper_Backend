@@ -197,7 +197,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Watchlist"])
 JWT_SECRET = os.getenv("JWT_SECRET", "secret")
 
-UPDATE_INTERVAL = 60  # seconds between auto-updates
+UPDATE_INTERVAL = 10 #SECONDS between auto-updates
 
 # ============================================================== 
 # 🧩 Authentication

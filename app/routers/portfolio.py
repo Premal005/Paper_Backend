@@ -310,6 +310,7 @@
 
 #     performance_data.update({"bestPerformer": best, "worstPerformer": worst, "holdingsCount": len(portfolio.get("holdings", []))})
 #     return {"success": True, "data": performance_data}
+
 from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from typing import List
 from bson import ObjectId

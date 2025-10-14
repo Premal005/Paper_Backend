@@ -161,7 +161,7 @@ async def start_alpaca_feed(
 
                 async for raw in ws:
                     msg = json.loads(raw)
-                    logger.info(f"{msg}")
+                    # logger.info(f"{msg}")
                     if isinstance(msg, list):
                         for item in msg:
                             if item.get("T") == "success":

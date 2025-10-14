@@ -77,7 +77,7 @@ subscribed_symbols2 = [
     "NSE:TORNTPHARM-EQ", "NSE:ZYDUSLIFE-EQ", "NSE:METROPOLIS-EQ", "NSE:MEDANTA-EQ",
     "NSE:RAIN-EQ", "NSE:ASTERDM-EQ", "NSE:SUNTV-EQ", "NSE:ZEEL-EQ", "NSE:PVRINOX-EQ",
     "NSE:BALRAMCHIN-EQ", "NSE:RAJESHEXPO-EQ", "NSE:SHREECEM-EQ", "NSE:ACC-EQ",
-    "NSE:AMBUJACEM-EQ", "NSE:DALBHARAT-EQ", "NSE:JKCEMENT-EQ"
+    "NSE:AMBUJACEM-EQ", "NSE:DALBHARAT-EQ", "NSE:JKCEMENT-EQ", "NSE:SBIN28OCT900CE"
     
 ]
 
@@ -166,6 +166,16 @@ async def root():
 async def startup_event():
     logger.info("🚀 Starting Paper Trading Backend...")
     # watchlist.start_watchlist_updater(app)
+
+
+
+
+    from app.routers.order import process_pending_orders
+    asyncio.create_task(process_pending_orders())
+
+
+
+
     async def start_alpaca():
         # Pass globals so Alpaca WS can update
         await alpacaService.start_alpaca_feed(

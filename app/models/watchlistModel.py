@@ -2,6 +2,7 @@
 from bson import ObjectId
 from app.database import db
 
+
 class Watchlist:
     collection = db.watchlists
 
