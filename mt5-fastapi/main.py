@@ -576,7 +576,7 @@ async def get_symbol_info(symbol_name: str, connection: MT5Connection = Depends(
     symbol_info = mt5.symbol_info(symbol_name)
     if symbol_info is None:
         raise HTTPException(status_code=404, detail=f"Symbol {symbol_name} not found")
-    logger.info(f"{symbol_info}")
+    # logger.info(f"{symbol_info}")
     return SymbolInfo(
         symbol=symbol_info.name,
         bid=symbol_info.bid,

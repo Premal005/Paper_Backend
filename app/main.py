@@ -303,7 +303,8 @@ async def startup_event():
     logger.info("🚀 Starting Paper Trading Backend...")
     # watchlist.start_watchlist_updater(app)
 
-
+    from app.services.mt5_websocket_service import mt5_websocket_service
+    mt5_websocket_service.start()
 
 
     from app.routers.order import process_pending_orders
@@ -341,6 +342,7 @@ async def startup_event():
     asyncio.create_task(fyerService.process_fyers_messages())
 
     from app.routers import watchlist
+    await asyncio.sleep(5)
     watchlist.start_watchlist_updater(loop)
     
     logger.info("✅ Feeds launched")

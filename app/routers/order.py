@@ -619,15 +619,23 @@ async def create_order(
     current_user = await User.find_by_id(user["_id"])
     current_price = await get_current_market_price(symbol, exchange)
     
-    # ✅ FIXED: Market orders execute at orderPrice, limit orders at orderPrice when conditions met
+    if current_price <= 0:
+        raise HTTPException(status_code=400, detail="Unable to get current market price")
+    
+    # ✅ FIXED: Market orders execute at CURRENT MARKET PRICE, limit orders at orderPrice
     if orderType == "market":
-        execution_price = orderPrice  # Use the price user specified
+        execution_price = current_price  # Use current market price for execution
         total_cost = quantity * execution_price
+        
+        # Log warning if user specified price differs significantly from market
+        if abs(orderPrice - current_price) > current_price * 0.01:  # More than 1% difference
+            print(f"⚠️ Market order: User specified ${orderPrice}, but executing at market price ${current_price:.2f}")
+            
     else:
         execution_price = orderPrice  # Will execute at this price when conditions met
         total_cost = quantity * execution_price
 
-    # Validate balance/holdings
+    # Validate balance/holdings using execution price
     if side == "buy" and current_user.get("balance", 0) < total_cost:
         raise HTTPException(status_code=400, detail="Insufficient balance")
 
@@ -651,7 +659,7 @@ async def create_order(
         "exchange": exchange,
         "side": side,
         "quantity": quantity,
-        "orderPrice": orderPrice,
+        "orderPrice": orderPrice,  # User's intended price (for reference)
         "orderType": orderType,
         "status": "pending" if orderType == "limit" else "active",
         "currentMarketPrice": current_price,
@@ -659,9 +667,9 @@ async def create_order(
         "updatedAt": datetime.utcnow()
     }
 
-    # For market orders, execute immediately at orderPrice
+    # For market orders, execute immediately at CURRENT MARKET PRICE
     if orderType == "market":
-        order_data["executedPrice"] = orderPrice  # Use orderPrice, not current_price
+        order_data["executedPrice"] = current_price  # Use current market price, not orderPrice
         order_data["status"] = "active"
         order_data["executedAt"] = datetime.utcnow()
     else:
@@ -675,11 +683,11 @@ async def create_order(
     if not saved_order:
         raise HTTPException(status_code=500, detail="Failed to save order to database")
 
-    # Execute market orders immediately
+    # Execute market orders immediately at CURRENT MARKET PRICE
     if orderType == "market":
         try:
             await update_portfolio(order_data, current_user["_id"])
-            message = "Market order executed successfully"
+            message = f"Market order executed successfully at current market price ${current_price:.2f}"
             
         except Exception as e:
             await Order.update_status(order_id, "failed")

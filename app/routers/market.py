@@ -26,7 +26,7 @@ CATEGORY_MAP = {
     "CRYPTO": ["CRYPTO"],      # MT5
     "COMEX": ["COMEX"],        # MT5
     "OPTIONS": ["US_OPTIONS"], # Alpaca
-    "FUTURES": ["NSE", "MCX"]  # FYERS
+    "FUTURES": ["NSE", "MCX"],  # FYERS
 }
 
 # ----------------------
