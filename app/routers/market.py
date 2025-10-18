@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Market"])
 MT5_SERVICE_URL = "http://13.53.42.25:5000"  # Your MT5 FastAPI service URL
 # MT5_SERVICE_URL = "http://localhost:8000"
-ALLOWED_EXCHANGES = ["FUTURES", "OPTIONS", "FOREX", "CRYPTO"]
+ALLOWED_EXCHANGES = ["FUTURES", "OPTIONS", "FOREX", "CRYPTO", "MCX"]
 
 CATEGORY_MAP = {
     "FOREX": ["FOREX"],        # MT5
@@ -27,6 +27,7 @@ CATEGORY_MAP = {
     "COMEX": ["COMEX"],        # MT5
     "OPTIONS": ["US_OPTIONS"], # Alpaca
     "FUTURES": ["NSE", "MCX"],  # FYERS
+    "MCX": ["COMMODITY"],
 }
 
 # ----------------------
@@ -134,17 +135,70 @@ async def get_quote_alpaca(symbol: str):
 #         return None
 
 
+# async def get_quote_fyers(symbol: str):
+#     try:
+#         # Convert symbol to FYERS format if needed
+#         fyers_symbol = symbol
+#         if ":" not in symbol and "-" not in symbol:
+#             # Assume it's a basic symbol, try different formats
+#             possible_symbols = [
+#                 f"NSE:{symbol}-EQ",  # Equity
+#                 f"NSE:{symbol}FUT",  # Futures  
+#                 f"NSE:{symbol}CE",   # Call Options
+#                 f"NSE:{symbol}PE",   # Put Options
+#             ]
+            
+#             for possible_symbol in possible_symbols:
+#                 doc = await fyerService.market_data.find_one({"symbol": possible_symbol})
+#                 if doc:
+#                     fyers_symbol = possible_symbol
+#                     break
+#         else:
+#             doc = await fyerService.market_data.find_one({"symbol": symbol.upper()})
+        
+#         if not doc:
+#             return None
+            
+#         return {
+#             "symbol": doc.get("symbol", symbol),
+#             "exchange": "FYERS", 
+#             "name": doc.get("symbol", symbol),
+#             "bid": doc.get("ltp", 0),
+#             "ask": doc.get("ltp", 0), 
+#             "last_price": doc.get("ltp", 0),
+#             "open": doc.get("open", 0),
+#             "high": doc.get("high", 0),
+#             "low": doc.get("low", 0),
+#             "close": doc.get("close", 0),
+#             "volume": doc.get("volume", 0),
+#             "timestamp": datetime.utcnow().isoformat(),
+#             "source": "FYERS",
+#             "day_change": doc.get("day_change", 0),
+#             "day_change_percentage": doc.get("day_change_percentage", 0),
+#         }
+#     except Exception as e:
+#         logger.error(f"Error getting FYERS quote for {symbol}: {e}")
+#         return None
+
 async def get_quote_fyers(symbol: str):
     try:
-        # Convert symbol to FYERS format if needed
         fyers_symbol = symbol
+        
+        # Check if it's explicitly an MCX or NSE symbol
         if ":" not in symbol and "-" not in symbol:
-            # Assume it's a basic symbol, try different formats
+            # Try both NSE and MCX formats
             possible_symbols = [
+                # NSE formats
                 f"NSE:{symbol}-EQ",  # Equity
                 f"NSE:{symbol}FUT",  # Futures  
                 f"NSE:{symbol}CE",   # Call Options
                 f"NSE:{symbol}PE",   # Put Options
+                
+                # MCX formats
+                f"MCX:{symbol}FUT",  # MCX Futures
+                f"MCX:{symbol}CE",   # MCX Call Options
+                f"MCX:{symbol}PE",   # MCX Put Options
+                f"MCX:{symbol}",     # MCX Spot
             ]
             
             for possible_symbol in possible_symbols:
@@ -153,14 +207,24 @@ async def get_quote_fyers(symbol: str):
                     fyers_symbol = possible_symbol
                     break
         else:
+            # Symbol already has exchange prefix
             doc = await fyerService.market_data.find_one({"symbol": symbol.upper()})
         
         if not doc:
             return None
+        
+        # Determine exchange from symbol prefix
+        if doc.get("symbol", "").startswith("MCX:"):
+            exchange = "MCX"
+            instrument_type = doc.get("instrument_type", "COMMODITY")
+        else:
+            exchange = "NSE" 
+            instrument_type = doc.get("instrument_type", "EQUITY")
             
         return {
             "symbol": doc.get("symbol", symbol),
-            "exchange": "FYERS", 
+            "exchange": exchange,
+            "instrument_type": instrument_type,
             "name": doc.get("symbol", symbol),
             "bid": doc.get("ltp", 0),
             "ask": doc.get("ltp", 0), 
@@ -178,7 +242,6 @@ async def get_quote_fyers(symbol: str):
     except Exception as e:
         logger.error(f"Error getting FYERS quote for {symbol}: {e}")
         return None
-
 
 
 async def get_quote_mt5(symbol: str):
@@ -300,6 +363,82 @@ async def get_market_by_category(type: str):
         return {"error": str(e), "data": []}
 
 
+# @router.get("/{exchange}/{symbol}")
+# async def get_single_market(exchange: str, symbol: str, category: Optional[str] = None):
+#     try:
+#         exchange = exchange.strip().upper()
+#         symbol = symbol.strip().upper()
+#         category = category.strip().upper() if category else None
+
+#         # ✅ Validate exchange
+#         if exchange not in ALLOWED_EXCHANGES:
+#             return {
+#                 "success": False,
+#                 "error": f"Exchange must be one of {ALLOWED_EXCHANGES}"
+#             }
+
+#         # ✅ Validate category
+#         allowed_categories = CATEGORY_MAP.get(exchange, [])
+#         if category and category not in allowed_categories:
+#             return {
+#                 "success": False,
+#                 "error": f"Category for {exchange} must be one of {allowed_categories}"
+#             }
+
+#         # ✅ Fetch market data
+#         item = None
+#         if exchange in ["FOREX", "CRYPTO", "COMEX"]:
+#             item = await get_quote_mt5(symbol)
+#         elif exchange == "OPTIONS":
+#             item = await get_quote_alpaca(symbol)
+#         elif exchange == "FUTURES":
+#             item = await get_quote_fyers(symbol)
+
+#         # ✅ Fallback response if no data found
+#         if not item:
+#             return {
+#                 "success": False,
+#                 "data": {
+#                     "symbol": symbol,
+#                     "exchange": exchange,
+#                     "name": "",
+#                     "sector": "",
+#                     "current_price": 0,
+#                     "day_change": 0,
+#                     "day_change_percentage": 0,
+#                     "open": 0,
+#                     "high": 0,
+#                     "low": 0,
+#                     "volume": 0,
+#                     "market_cap": 0
+#                 },
+#                 "note": "Market data not found"
+#             }
+
+#         # ✅ Map fields safely
+#         mapped = {
+#             "symbol": item.get("symbol", symbol),
+#             "exchange": item.get("exchange", exchange),
+#             "name": item.get("name", ""),
+#             "sector": item.get("sector", ""),
+#             "current_price": item.get("last_price", 0),
+#             "day_change": item.get("day_change", 0),
+#             "day_change_percentage": item.get("day_change_percentage", 0),
+#             "open": item.get("open", 0),
+#             "high": item.get("high", 0),
+#             "low": item.get("low", 0),
+#             "volume": item.get("volume", 0),
+#             "market_cap": item.get("market_cap", 0),
+#         }
+
+#         return {"success": True, "data": mapped}
+
+#     except Exception as e:
+#         # ✅ Catch unexpected errors
+#         return {"success": False, "error": str(e)}
+    
+
+
 @router.get("/{exchange}/{symbol}")
 async def get_single_market(exchange: str, symbol: str, category: Optional[str] = None):
     try:
@@ -328,7 +467,7 @@ async def get_single_market(exchange: str, symbol: str, category: Optional[str] 
             item = await get_quote_mt5(symbol)
         elif exchange == "OPTIONS":
             item = await get_quote_alpaca(symbol)
-        elif exchange == "FUTURES":
+        elif exchange in ["FUTURES", "MCX"]:  # UPDATE: Both NSE and MCX
             item = await get_quote_fyers(symbol)
 
         # ✅ Fallback response if no data found
@@ -371,6 +510,4 @@ async def get_single_market(exchange: str, symbol: str, category: Optional[str] 
         return {"success": True, "data": mapped}
 
     except Exception as e:
-        # ✅ Catch unexpected errors
-        return {"success": False, "error": str(e)}
-    
+        return {"success": False, "error": str(e)}    
