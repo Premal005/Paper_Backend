@@ -200,7 +200,7 @@ class MT5SymbolData:
     latency_ms: float
 
 class MT5WebSocketService:
-    def __init__(self, host='13.53.42.25', command_port=77, data_port=78):
+    def __init__(self, host='13.53.42.25', command_port=85, data_port=86):
         self.host = host
         self.command_port = command_port
         self.data_port = data_port
