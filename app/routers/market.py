@@ -17,8 +17,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Market"])
-# MT5_SERVICE_URL = "http://13.53.42.25:5000"  # Your MT5 FastAPI service URL
-MT5_SERVICE_URL = "http://localhost:8000"
+MT5_SERVICE_URL = "http://13.53.42.25:5000"  # Your MT5 FastAPI service URL
+# MT5_SERVICE_URL = "http://localhost:8000"
 ALLOWED_EXCHANGES = ["FUTURES", "OPTIONS", "FOREX", "CRYPTO", "MCX"]
 
 CATEGORY_MAP = {
