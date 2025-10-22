@@ -520,6 +520,45 @@ async def get_transactions(
 
 
 # ---------------- Create Deposit ---------------- #
+# @router.post("/deposit", response_model=TransactionResponse)
+# async def create_deposit(req: DepositRequest, current_user: dict = Depends(get_current_user)):
+#     if req.amount <= 0:
+#         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Deposit amount must be greater than 0")
+
+#     txn = {
+#         "userId": ObjectId(current_user["_id"]),
+#         "type": "deposit",
+#         "amount": req.amount,
+#         "description": req.description,
+#         "status": "approved",
+#         "createdAt": datetime.utcnow()
+#     }
+
+#     result = await transaction_collection.insert_one(txn)
+
+#     # Update user balance
+#     await db.users.update_one(
+#         {"_id": ObjectId(current_user["_id"])},
+#         {"$inc": {"balance": req.amount, "ledgerBalance": req.amount, "marginAvailable": req.amount}}
+#     )
+
+#     user = await db.users.find_one(
+#         {"_id": ObjectId(current_user["_id"])},
+#         {"balance": 1, "ledgerBalance": 1, "marginAvailable": 1}
+#     )
+
+#     txn["_id"] = result.inserted_id
+#     formatted_txn = format_transaction(txn)
+
+#     return {
+#         "transaction": formatted_txn,
+#         "newBalance": user["balance"],
+#         "newLedgerBalance": user["ledgerBalance"],
+#         "newMarginAvailable": user["marginAvailable"]
+#     }
+
+
+
 @router.post("/deposit", response_model=TransactionResponse)
 async def create_deposit(req: DepositRequest, current_user: dict = Depends(get_current_user)):
     if req.amount <= 0:
@@ -536,16 +575,15 @@ async def create_deposit(req: DepositRequest, current_user: dict = Depends(get_c
 
     result = await transaction_collection.insert_one(txn)
 
-    # Update user balance
-    await db.users.update_one(
-        {"_id": ObjectId(current_user["_id"])},
-        {"$inc": {"balance": req.amount, "ledgerBalance": req.amount, "marginAvailable": req.amount}}
+    # Update user balance - deposit increases both ledger and available margin
+    await User.update_balance(
+        user_id=ObjectId(current_user["_id"]),
+        balance=req.amount,
+        ledger_balance=req.amount,
+        margin_available=req.amount
     )
 
-    user = await db.users.find_one(
-        {"_id": ObjectId(current_user["_id"])},
-        {"balance": 1, "ledgerBalance": 1, "marginAvailable": 1}
-    )
+    user = await User.get_full_user(current_user["_id"])
 
     txn["_id"] = result.inserted_id
     formatted_txn = format_transaction(txn)
@@ -556,6 +594,8 @@ async def create_deposit(req: DepositRequest, current_user: dict = Depends(get_c
         "newLedgerBalance": user["ledgerBalance"],
         "newMarginAvailable": user["marginAvailable"]
     }
+
+
 
 
 # ---------------- Create Withdrawal ---------------- #
