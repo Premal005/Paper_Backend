@@ -194,40 +194,86 @@ class User:
         """Get complete user data for calculations"""
         return await User.collection.find_one({"_id": ObjectId(user_id)})
 
+    # @staticmethod
+    # async def update_balance(user_id: str, balance: float = 0, ledger_balance: float = 0, 
+    #                     margin_used: float = 0, margin_available: float = 0,
+    #                     initial_investment: float = 0):
+    #     """
+    #     Update user balance fields - FIXED VERSION
+    #     Uses $inc for all relative changes to maintain consistency
+    #     """
+    #     update_data = {"$inc": {}}
+        
+    #     # All parameters are treated as relative changes
+    #     if balance != 0:
+    #         update_data["$inc"]["balance"] = balance
+        
+    #     if ledger_balance != 0:
+    #         update_data["$inc"]["ledgerBalance"] = ledger_balance
+        
+    #     if margin_used != 0:
+    #         update_data["$inc"]["marginUsed"] = margin_used
+        
+    #     if margin_available != 0:
+    #         update_data["$inc"]["marginAvailable"] = margin_available
+        
+    #     if initial_investment != 0:
+    #         update_data["$inc"]["initialInvestment"] = initial_investment
+        
+    #     # Only update if there are changes
+    #     if update_data["$inc"]:
+    #         result = await User.collection.update_one(
+    #             {"_id": ObjectId(user_id)},
+    #             update_data
+    #         )
+    #         return result.modified_count > 0
+    #     return True
+    
+
     @staticmethod
     async def update_balance(user_id: str, balance: float = 0, ledger_balance: float = 0, 
                         margin_used: float = 0, margin_available: float = 0,
                         initial_investment: float = 0):
         """
-        Update user balance fields - FIXED VERSION
-        Uses $inc for all relative changes to maintain consistency
+        Update user balance fields - CORRECTED VERSION
+        margin_available should be calculated, not stored independently
         """
-        update_data = {"$inc": {}}
+        # Get current user data first
+        current_user = await User.get_full_user(user_id)
+        if not current_user:
+            return False
         
-        # All parameters are treated as relative changes
-        if balance != 0:
-            update_data["$inc"]["balance"] = balance
+        # Calculate new absolute values
+        new_ledger_balance = current_user.get("ledgerBalance", 0) + ledger_balance
+        new_margin_used = current_user.get("marginUsed", 0) + margin_used
         
-        if ledger_balance != 0:
-            update_data["$inc"]["ledgerBalance"] = ledger_balance
+        # ✅ CORRECT: Calculate margin_available based on ledger_balance and margin_used
+        new_margin_available = new_ledger_balance - new_margin_used
+        new_balance = new_margin_available  # balance should equal available margin
         
-        if margin_used != 0:
-            update_data["$inc"]["marginUsed"] = margin_used
+        update_data = {
+            "$set": {
+                "ledgerBalance": new_ledger_balance,
+                "marginUsed": new_margin_used,
+                "marginAvailable": new_margin_available,
+                "balance": new_balance
+            }
+        }
         
-        if margin_available != 0:
-            update_data["$inc"]["marginAvailable"] = margin_available
-        
+        # Only update initial investment if provided
         if initial_investment != 0:
-            update_data["$inc"]["initialInvestment"] = initial_investment
+            update_data["$set"]["initialInvestment"] = current_user.get("initialInvestment", 0) + initial_investment
         
-        # Only update if there are changes
-        if update_data["$inc"]:
-            result = await User.collection.update_one(
-                {"_id": ObjectId(user_id)},
-                update_data
-            )
-            return result.modified_count > 0
-        return True
+        result = await User.collection.update_one(
+            {"_id": ObjectId(user_id)},
+            update_data
+        )
+        return result.modified_count > 0
+
+
+
+
+
     # Alternative simpler method if the above doesn't work
     @staticmethod
     async def update_margin(user_id: str, margin_used: float = 0, margin_available: float = 0):
